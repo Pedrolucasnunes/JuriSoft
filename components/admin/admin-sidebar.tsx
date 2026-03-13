@@ -1,0 +1,143 @@
+"use client"
+
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import {
+  LayoutDashboard,
+  FileQuestion,
+  FileText,
+  Users,
+  BarChart3,
+  Scale,
+  LogOut,
+  Settings,
+} from "lucide-react"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarSeparator,
+} from "@/components/ui/sidebar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+
+const menuItems = [
+  {
+    title: "Dashboard",
+    url: "/admin",
+    icon: LayoutDashboard,
+  },
+  {
+    title: "Questões",
+    url: "/admin/questoes",
+    icon: FileQuestion,
+  },
+  {
+    title: "Simulados",
+    url: "/admin/simulados",
+    icon: FileText,
+  },
+  {
+    title: "Usuários",
+    url: "/admin/usuarios",
+    icon: Users,
+  },
+  {
+    title: "Estatísticas",
+    url: "/admin/estatisticas",
+    icon: BarChart3,
+  },
+]
+
+export function AdminSidebar() {
+  const pathname = usePathname()
+
+  return (
+    <Sidebar variant="sidebar" collapsible="icon">
+      <SidebarHeader className="p-4">
+        <Link href="/admin" className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive">
+            <Scale className="h-5 w-5 text-destructive-foreground" />
+          </div>
+          <span className="text-lg font-semibold text-foreground group-data-[collapsible=icon]:hidden">
+            JuriSoft Admin
+          </span>
+        </Link>
+      </SidebarHeader>
+
+      <SidebarSeparator />
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {menuItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === item.url}
+                    tooltip={item.title}
+                  >
+                    <Link href={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter className="p-2">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton className="h-12">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-destructive text-destructive-foreground text-xs">
+                      AD
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col items-start group-data-[collapsible=icon]:hidden">
+                    <span className="text-sm font-medium">Admin</span>
+                    <span className="text-xs text-muted-foreground">admin@jurisoft.com</span>
+                  </div>
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" className="w-56">
+                <DropdownMenuItem asChild>
+                  <Link href="/admin/configuracoes" className="flex items-center gap-2">
+                    <Settings className="h-4 w-4" />
+                    Configurações
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/" className="flex items-center gap-2 text-destructive">
+                    <LogOut className="h-4 w-4" />
+                    Sair
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
+  )
+}
