@@ -1,148 +1,144 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Search, Filter, BookmarkPlus, Bookmark, CheckCircle2, XCircle, Eye } from "lucide-react"
+import { Search, Filter, CheckCircle2, XCircle, Loader2 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
-const disciplinas = [
-  "Todas",
-  "Ética Profissional",
-  "Direito Constitucional",
-  "Direito Civil",
-  "Direito Penal",
-  "Direito Processual Civil",
-  "Direito Processual Penal",
-  "Direito do Trabalho",
-  "Direito Administrativo",
-  "Direito Tributário",
-  "Direito Empresarial",
-  "Direitos Humanos",
-  "Estatuto da OAB",
-]
+interface Questao {
+  id: string
+  enunciado: string
+  alternativa_a: string
+  alternativa_b: string
+  alternativa_c: string
+  alternativa_d: string
+  dificuldade: string
+  banca: string
+  ano: number
+  subject_id: string
+  topic_id: string
+  subject_name: string
+  topic_name: string
+}
 
-const dificuldades = ["Todas", "Fácil", "Média", "Difícil"]
-const bancas = ["Todas", "FGV", "CESPE", "VUNESP"]
+interface Filtros {
+  subjects: { id: string; name: string }[]
+  dificuldades: string[]
+  bancas: string[]
+}
 
-const questoesExemplo = [
-  {
-    id: 1,
-    disciplina: "Ética Profissional",
-    tema: "Deveres do Advogado",
-    banca: "FGV",
-    ano: 2023,
-    dificuldade: "Média",
-    incidencia: "Alta",
-    salva: false,
-    enunciado:
-      "O advogado tem o dever de guardar sigilo profissional sobre os fatos de que tenha tomado conhecimento no exercício da profissão. Sobre esse dever, é correto afirmar que:",
-    alternativas: [
-      { letra: "A", texto: "O sigilo profissional é absoluto e não comporta exceções." },
-      { letra: "B", texto: "O advogado pode revelar segredo profissional para sua própria defesa em processo disciplinar." },
-      { letra: "C", texto: "O dever de sigilo se extingue com a morte do cliente." },
-      { letra: "D", texto: "O sigilo profissional pode ser dispensado por autorização judicial." },
-    ],
-    respostaCorreta: "B",
-    explicacao:
-      "O sigilo profissional do advogado não é absoluto. Uma das exceções previstas no Código de Ética da OAB é justamente a possibilidade de revelação de fatos para a própria defesa em processo disciplinar ou judicial, limitando-se ao estritamente necessário.",
-  },
-  {
-    id: 2,
-    disciplina: "Direito Constitucional",
-    tema: "Controle de Constitucionalidade",
-    banca: "FGV",
-    ano: 2023,
-    dificuldade: "Difícil",
-    incidencia: "Alta",
-    salva: true,
-    enunciado:
-      "Sobre o controle de constitucionalidade no Brasil, assinale a alternativa correta:",
-    alternativas: [
-      { letra: "A", texto: "O controle difuso somente pode ser exercido pelo STF." },
-      { letra: "B", texto: "A ADI pode ser proposta por qualquer cidadão brasileiro." },
-      { letra: "C", texto: "O efeito da decisão em ADI é, em regra, erga omnes e vinculante." },
-      { letra: "D", texto: "O controle preventivo é exclusivo do Poder Executivo." },
-    ],
-    respostaCorreta: "C",
-    explicacao:
-      "A decisão proferida em Ação Direta de Inconstitucionalidade (ADI) possui, em regra, eficácia erga omnes (contra todos) e efeito vinculante em relação aos demais órgãos do Poder Judiciário e à Administração Pública direta e indireta, nas esferas federal, estadual e municipal.",
-  },
-  {
-    id: 3,
-    disciplina: "Direito Civil",
-    tema: "Contratos",
-    banca: "FGV",
-    ano: 2022,
-    dificuldade: "Fácil",
-    incidencia: "Média",
-    salva: false,
-    enunciado:
-      "No Código Civil brasileiro, a evicção corresponde:",
-    alternativas: [
-      { letra: "A", texto: "À perda total ou parcial da coisa por sentença judicial, reconhecendo direito anterior de outrem." },
-      { letra: "B", texto: "Ao defeito oculto na coisa que a torna imprópria ao uso." },
-      { letra: "C", texto: "À rescisão contratual por lesão." },
-      { letra: "D", texto: "À nulidade do contrato por vício de consentimento." },
-    ],
-    respostaCorreta: "A",
-    explicacao:
-      "A evicção ocorre quando o adquirente de um bem perde a propriedade, a posse ou o uso desse bem, em virtude de sentença judicial ou ato de autoridade administrativa, que reconhece a um terceiro direito anterior sobre a coisa.",
-  },
-]
+interface Pagination {
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
 
-function QuestaoCard({ questao }: { questao: typeof questoesExemplo[0] }) {
+function getDificuldadeColor(dificuldade: string) {
+  switch (dificuldade?.toLowerCase()) {
+    case "fácil":
+    case "facil":
+      return "bg-primary/20 text-primary"
+    case "média":
+    case "media":
+    case "médio":
+      return "bg-warning/20 text-warning"
+    case "difícil":
+    case "dificil":
+      return "bg-destructive/20 text-destructive"
+    default:
+      return "bg-secondary text-muted-foreground"
+  }
+}
+
+function QuestaoCard({ questao, userId }: { questao: Questao; userId: string }) {
   const [resposta, setResposta] = useState<string>("")
   const [mostrarResposta, setMostrarResposta] = useState(false)
-  const [salva, setSalva] = useState(questao.salva)
+  const [respostaCorreta, setRespostaCorreta] = useState<string | null>(null)
+  const [explicacao, setExplicacao] = useState<string | null>(null)
+  const [acertou, setAcertou] = useState<boolean | null>(null)
+  const [verificando, setVerificando] = useState(false)
 
-  const handleResponder = () => {
+  const alternativas = [
+    { letra: "A", texto: questao.alternativa_a },
+    { letra: "B", texto: questao.alternativa_b },
+    { letra: "C", texto: questao.alternativa_c },
+    { letra: "D", texto: questao.alternativa_d },
+  ]
+
+  const handleVerificar = async () => {
+    if (!resposta || !userId) return
+    setVerificando(true)
+
+    const res = await fetch("/api/simulados/resposta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        questionId: questao.id,
+        simuladoId: null,
+        resposta,
+      }),
+    })
+
+    const data = await res.json()
+    setVerificando(false)
+
+    if (!res.ok) {
+      console.error("Erro ao verificar:", data.error)
+      return
+    }
+
+    setAcertou(data.acertou)
+    setRespostaCorreta(data.resposta_correta)
     setMostrarResposta(true)
+
+    // Busca explicação da questão
+    const { data: qData } = await supabase
+      .from("questions")
+      .select("explicacao")
+      .eq("id", questao.id)
+      .single()
+
+    if (qData?.explicacao) setExplicacao(qData.explicacao)
   }
 
-  const acertou = resposta === questao.respostaCorreta
+  const handleTentarNovamente = () => {
+    setResposta("")
+    setMostrarResposta(false)
+    setRespostaCorreta(null)
+    setExplicacao(null)
+    setAcertou(null)
+  }
 
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
+        {/* Header da questão */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-secondary/30 p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{questao.disciplina}</Badge>
-            <Badge variant="outline">{questao.tema}</Badge>
+            <Badge variant="secondary">{questao.subject_name}</Badge>
+            <Badge variant="outline">{questao.topic_name}</Badge>
           </div>
           <div className="flex items-center gap-2">
-            <Badge
-              className={
-                questao.dificuldade === "Fácil"
-                  ? "bg-primary/20 text-primary"
-                  : questao.dificuldade === "Média"
-                  ? "bg-warning/20 text-warning"
-                  : "bg-destructive/20 text-destructive"
-              }
-            >
-              {questao.dificuldade}
-            </Badge>
-            <span className="text-xs text-muted-foreground">
-              {questao.banca} {questao.ano}
-            </span>
+            {questao.dificuldade && (
+              <Badge className={getDificuldadeColor(questao.dificuldade)}>
+                {questao.dificuldade}
+              </Badge>
+            )}
+            {(questao.banca || questao.ano) && (
+              <span className="text-xs text-muted-foreground">
+                {questao.banca} {questao.ano}
+              </span>
+            )}
           </div>
         </div>
 
@@ -155,12 +151,12 @@ function QuestaoCard({ questao }: { questao: typeof questoesExemplo[0] }) {
             className="space-y-2"
             disabled={mostrarResposta}
           >
-            {questao.alternativas.map((alt) => (
+            {alternativas.map((alt) => (
               <div
                 key={alt.letra}
                 className={`flex items-start gap-3 rounded-lg border p-3 transition-colors ${
                   mostrarResposta
-                    ? alt.letra === questao.respostaCorreta
+                    ? alt.letra === respostaCorreta
                       ? "border-primary bg-primary/5"
                       : resposta === alt.letra
                       ? "border-destructive bg-destructive/5"
@@ -177,16 +173,17 @@ function QuestaoCard({ questao }: { questao: typeof questoesExemplo[0] }) {
                 >
                   <span className="font-medium">{alt.letra})</span> {alt.texto}
                 </Label>
-                {mostrarResposta && alt.letra === questao.respostaCorreta && (
+                {mostrarResposta && alt.letra === respostaCorreta && (
                   <CheckCircle2 className="h-5 w-5 shrink-0 text-primary" />
                 )}
-                {mostrarResposta && resposta === alt.letra && alt.letra !== questao.respostaCorreta && (
+                {mostrarResposta && resposta === alt.letra && alt.letra !== respostaCorreta && (
                   <XCircle className="h-5 w-5 shrink-0 text-destructive" />
                 )}
               </div>
             ))}
           </RadioGroup>
 
+          {/* Feedback */}
           {mostrarResposta && (
             <div className="mt-4 rounded-lg border border-border bg-secondary/30 p-4">
               <div className="mb-2 flex items-center gap-2">
@@ -202,37 +199,22 @@ function QuestaoCard({ questao }: { questao: typeof questoesExemplo[0] }) {
                   </>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">{questao.explicacao}</p>
+              {explicacao && (
+                <p className="text-sm text-muted-foreground">{explicacao}</p>
+              )}
             </div>
           )}
 
-          <div className="mt-4 flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSalva(!salva)}
-              className={salva ? "text-primary" : "text-muted-foreground"}
-            >
-              {salva ? (
-                <Bookmark className="mr-2 h-4 w-4 fill-current" />
-              ) : (
-                <BookmarkPlus className="mr-2 h-4 w-4" />
-              )}
-              {salva ? "Salva" : "Salvar para revisão"}
-            </Button>
-
+          <div className="mt-4 flex items-center justify-end">
             {!mostrarResposta ? (
-              <Button onClick={handleResponder} disabled={!resposta}>
-                Verificar resposta
+              <Button onClick={handleVerificar} disabled={!resposta || verificando}>
+                {verificando
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando...</>
+                  : "Verificar resposta"
+                }
               </Button>
             ) : (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setResposta("")
-                  setMostrarResposta(false)
-                }}
-              >
+              <Button variant="outline" onClick={handleTentarNovamente}>
                 Tentar novamente
               </Button>
             )}
@@ -244,18 +226,75 @@ function QuestaoCard({ questao }: { questao: typeof questoesExemplo[0] }) {
 }
 
 export default function QuestoesPage() {
+  const [userId, setUserId] = useState<string>("")
+  const [questoes, setQuestoes] = useState<Questao[]>([])
+  const [filtros, setFiltros] = useState<Filtros>({ subjects: [], dificuldades: [], bancas: [] })
+  const [pagination, setPagination] = useState<Pagination>({ total: 0, page: 1, limit: 10, totalPages: 0 })
+  const [loading, setLoading] = useState(true)
+  const [loadingFiltros, setLoadingFiltros] = useState(true)
+
+  // Estados dos filtros
   const [searchTerm, setSearchTerm] = useState("")
-  const [disciplina, setDisciplina] = useState("Todas")
-  const [dificuldade, setDificuldade] = useState("Todas")
-  const [banca, setBanca] = useState("Todas")
+  const [subjectId, setSubjectId] = useState("todas")
+  const [dificuldade, setDificuldade] = useState("todas")
+  const [banca, setBanca] = useState("todas")
   const [showFilters, setShowFilters] = useState(false)
+  const [page, setPage] = useState(1)
+
+  // Busca usuário e filtros ao montar
+  useEffect(() => {
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) setUserId(user.id)
+
+      const res = await fetch("/api/questions/filtros")
+      const data = await res.json()
+      setFiltros(data)
+      setLoadingFiltros(false)
+    }
+    init()
+  }, [])
+
+  // Busca questões quando filtros ou página mudam
+  const fetchQuestoes = useCallback(async () => {
+    setLoading(true)
+
+    const params = new URLSearchParams()
+    params.set("page", String(page))
+    if (subjectId !== "todas") params.set("subjectId", subjectId)
+    if (dificuldade !== "todas") params.set("dificuldade", dificuldade)
+    if (banca !== "todas") params.set("banca", banca)
+    if (searchTerm.trim()) params.set("busca", searchTerm.trim())
+
+    const res = await fetch(`/api/questions?${params.toString()}`)
+    const data = await res.json()
+
+    setQuestoes(data.questions ?? [])
+    setPagination(data.pagination ?? { total: 0, page: 1, limit: 10, totalPages: 0 })
+    setLoading(false)
+  }, [page, subjectId, dificuldade, banca, searchTerm])
+
+  useEffect(() => {
+    fetchQuestoes()
+  }, [fetchQuestoes])
+
+  const handleLimparFiltros = () => {
+    setSubjectId("todas")
+    setDificuldade("todas")
+    setBanca("todas")
+    setSearchTerm("")
+    setPage(1)
+  }
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Banco de Questões</h1>
         <p className="text-muted-foreground">
-          Mais de 15.000 questões organizadas por disciplina e tema
+          {pagination.total > 0
+            ? `${pagination.total.toLocaleString("pt-BR")} questões organizadas por disciplina e tema`
+            : "Questões organizadas por disciplina e tema"
+          }
         </p>
       </div>
 
@@ -267,14 +306,11 @@ export default function QuestoesPage() {
             <Input
               placeholder="Buscar por tema ou palavra-chave..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
               className="pl-10"
             />
           </div>
-          <Button
-            variant="outline"
-            onClick={() => setShowFilters(!showFilters)}
-          >
+          <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
             <Filter className="mr-2 h-4 w-4" />
             Filtros
           </Button>
@@ -286,31 +322,33 @@ export default function QuestoesPage() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="space-y-2">
                   <Label>Disciplina</Label>
-                  <Select value={disciplina} onValueChange={setDisciplina}>
+                  <Select value={subjectId} onValueChange={(v) => { setSubjectId(v); setPage(1) }}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Todas" />
                     </SelectTrigger>
                     <SelectContent>
-                      {disciplinas.map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {d}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="todas">Todas</SelectItem>
+                      {loadingFiltros ? (
+                        <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                      ) : (
+                        filtros.subjects.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label>Dificuldade</Label>
-                  <Select value={dificuldade} onValueChange={setDificuldade}>
+                  <Select value={dificuldade} onValueChange={(v) => { setDificuldade(v); setPage(1) }}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Todas" />
                     </SelectTrigger>
                     <SelectContent>
-                      {dificuldades.map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {d}
-                        </SelectItem>
+                      <SelectItem value="todas">Todas</SelectItem>
+                      {filtros.dificuldades.map((d) => (
+                        <SelectItem key={d} value={d}>{d}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -318,31 +356,21 @@ export default function QuestoesPage() {
 
                 <div className="space-y-2">
                   <Label>Banca</Label>
-                  <Select value={banca} onValueChange={setBanca}>
+                  <Select value={banca} onValueChange={(v) => { setBanca(v); setPage(1) }}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Todas" />
                     </SelectTrigger>
                     <SelectContent>
-                      {bancas.map((b) => (
-                        <SelectItem key={b} value={b}>
-                          {b}
-                        </SelectItem>
+                      <SelectItem value="todas">Todas</SelectItem>
+                      {filtros.bancas.map((b) => (
+                        <SelectItem key={b} value={b}>{b}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="flex items-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setDisciplina("Todas")
-                      setDificuldade("Todas")
-                      setBanca("Todas")
-                      setSearchTerm("")
-                    }}
-                    className="w-full"
-                  >
+                  <Button variant="outline" onClick={handleLimparFiltros} className="w-full">
                     Limpar filtros
                   </Button>
                 </div>
@@ -353,20 +381,44 @@ export default function QuestoesPage() {
       </div>
 
       {/* Lista de questões */}
-      <div className="space-y-4">
-        {questoesExemplo.map((questao) => (
-          <QuestaoCard key={questao.id} questao={questao} />
-        ))}
-      </div>
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : questoes.length === 0 ? (
+        <div className="flex items-center justify-center h-32">
+          <p className="text-muted-foreground text-sm">Nenhuma questão encontrada com esses filtros.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {questoes.map((questao) => (
+            <QuestaoCard key={questao.id} questao={questao} userId={userId} />
+          ))}
+        </div>
+      )}
 
-      {/* Paginação simples */}
-      <div className="flex items-center justify-center gap-2">
-        <Button variant="outline" disabled>
-          Anterior
-        </Button>
-        <span className="px-4 text-sm text-muted-foreground">Página 1 de 100</span>
-        <Button variant="outline">Próximo</Button>
-      </div>
+      {/* Paginação */}
+      {pagination.totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setPage((p) => p - 1)}
+            disabled={page === 1 || loading}
+          >
+            Anterior
+          </Button>
+          <span className="px-4 text-sm text-muted-foreground">
+            Página {pagination.page} de {pagination.totalPages}
+          </span>
+          <Button
+            variant="outline"
+            onClick={() => setPage((p) => p + 1)}
+            disabled={page === pagination.totalPages || loading}
+          >
+            Próximo
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

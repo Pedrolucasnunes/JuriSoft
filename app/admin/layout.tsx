@@ -2,28 +2,27 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/s
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { Separator } from "@/components/ui/separator"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { AdminGuard } from "@/components/admin/admin-guard"
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <SidebarProvider>
-      <AdminSidebar />
-      <SidebarInset>
-        <header className="flex h-14 items-center justify-between border-b border-border px-4 lg:px-6">
-          <div className="flex items-center gap-4">
-            <SidebarTrigger className="-ml-2" />
-            <Separator orientation="vertical" className="h-6" />
-            <span className="text-sm font-medium text-muted-foreground">Painel Administrativo</span>
-          </div>
-          <ThemeToggle />
-        </header>
-        <main className="flex-1 overflow-auto p-4 lg:p-6">
-          {children}
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+    <AdminGuard>
+      <SidebarProvider>
+        <AdminSidebar />
+        <SidebarInset>
+          <header className="flex h-14 items-center justify-between border-b border-border px-4 lg:px-6">
+            <div className="flex items-center gap-4">
+              <SidebarTrigger className="-ml-2" />
+              <Separator orientation="vertical" className="h-6" />
+              <span className="text-sm font-medium text-muted-foreground">Painel Administrativo</span>
+            </div>
+            <ThemeToggle />
+          </header>
+          <main className="flex-1 overflow-auto p-4 lg:p-6">
+            {children}
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    </AdminGuard>
   )
 }

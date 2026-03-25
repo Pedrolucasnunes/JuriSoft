@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,22 +8,88 @@ import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { User, Mail, Lock, Calendar, Trophy, BookOpen, Target } from "lucide-react"
+import { User, Mail, Lock, Trophy, BookOpen, Target, Loader2 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { toast } from "sonner"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 
 export default function PerfilPage() {
   const [isEditing, setIsEditing] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [salvando, setSalvando] = useState(false)
+  const [confirmSair, setConfirmSair] = useState(false)
+  const [nome, setNome] = useState("")
+  const [email, setEmail] = useState("")
+  const [dataCadastro, setDataCadastro] = useState("")
+  const [novaSenha, setNovaSenha] = useState("")
+  const [stats, setStats] = useState({ simuladosFeitos: 0, questoesResolvidas: 0, taxaAcerto: 0 })
 
-  const userData = {
-    nome: "João Silva",
-    email: "joao@email.com",
-    dataCadastro: "10 Jan 2024",
-    plano: "Premium",
-    estatisticas: {
-      simuladosFeitos: 12,
-      questoesResolvidas: 1470,
-      taxaAcerto: 67,
-      diasSequencia: 5,
-    },
+  useEffect(() => {
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      setEmail(user.email ?? "")
+      setNome(user.user_metadata?.full_name ?? "")
+      setDataCadastro(new Date(user.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }))
+
+      const res = await fetch(`/api/dashboard?userId=${user.id}`)
+      const data = await res.json()
+
+      if (res.ok) {
+        const totalSimulados = await supabase.from("simulados").select("id", { count: "exact" }).eq("user_id", user.id).gt("acertos", 0)
+        setStats({
+          simuladosFeitos: totalSimulados.count ?? 0,
+          questoesResolvidas: data.resumo?.totalRespondidas ?? 0,
+          taxaAcerto: data.resumo?.taxaGeralAcerto ?? 0,
+        })
+      }
+
+      setLoading(false)
+    }
+    init()
+  }, [])
+
+  const getIniciais = (nome: string) =>
+    nome.split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase() || "?"
+
+  const handleSalvar = async () => {
+    setSalvando(true)
+
+    try {
+      const updates: any = { data: { full_name: nome } }
+
+      if (novaSenha) {
+        if (novaSenha.length < 6) {
+          toast.error("A nova senha deve ter pelo menos 6 caracteres.")
+          setSalvando(false)
+          return
+        }
+        updates.password = novaSenha
+      }
+
+      const { error } = await supabase.auth.updateUser(updates)
+
+      if (error) {
+        toast.error(error.message)
+      } else {
+        toast.success("Perfil atualizado com sucesso!")
+        setIsEditing(false)
+        setNovaSenha("")
+      }
+    } catch {
+      toast.error("Erro inesperado ao salvar.")
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
   return (
@@ -34,9 +100,7 @@ export default function PerfilPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Coluna principal */}
         <div className="space-y-6 lg:col-span-2">
-          {/* Informações do usuário */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -44,26 +108,23 @@ export default function PerfilPage() {
                   <CardTitle>Informações Pessoais</CardTitle>
                   <CardDescription>Atualize seus dados de perfil</CardDescription>
                 </div>
-                <Button
-                  variant={isEditing ? "default" : "outline"}
-                  onClick={() => setIsEditing(!isEditing)}
-                >
-                  {isEditing ? "Salvar" : "Editar"}
-                </Button>
+                {isEditing ? (
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => { setIsEditing(false); setNovaSenha("") }} disabled={salvando}>Cancelar</Button>
+                    <Button onClick={handleSalvar} disabled={salvando}>
+                      {salvando ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...</> : "Salvar"}
+                    </Button>
+                  </div>
+                ) : (
+                  <Button variant="outline" onClick={() => setIsEditing(true)}>Editar</Button>
+                )}
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center gap-4">
                 <Avatar className="h-20 w-20">
-                  <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
-                    JS
-                  </AvatarFallback>
+                  <AvatarFallback className="bg-primary text-primary-foreground text-2xl">{getIniciais(nome)}</AvatarFallback>
                 </Avatar>
-                {isEditing && (
-                  <Button variant="outline" size="sm">
-                    Alterar foto
-                  </Button>
-                )}
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -71,27 +132,16 @@ export default function PerfilPage() {
                   <Label htmlFor="nome">Nome completo</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="nome"
-                      defaultValue={userData.nome}
-                      disabled={!isEditing}
-                      className="pl-10"
-                    />
+                    <Input id="nome" value={nome} onChange={(e) => setNome(e.target.value)} disabled={!isEditing} className="pl-10" />
                   </div>
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="email">E-mail</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="email"
-                      type="email"
-                      defaultValue={userData.email}
-                      disabled={!isEditing}
-                      className="pl-10"
-                    />
+                    <Input id="email" type="email" value={email} disabled className="pl-10 opacity-60" />
                   </div>
+                  <p className="text-xs text-muted-foreground">O e-mail não pode ser alterado</p>
                 </div>
               </div>
 
@@ -99,40 +149,18 @@ export default function PerfilPage() {
 
               <div>
                 <h4 className="mb-4 font-medium text-foreground">Alterar Senha</h4>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="senha-atual">Senha atual</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        id="senha-atual"
-                        type="password"
-                        placeholder="Digite sua senha atual"
-                        disabled={!isEditing}
-                        className="pl-10"
-                      />
-                    </div>
+                <div className="space-y-2 max-w-sm">
+                  <Label htmlFor="nova-senha">Nova senha</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input id="nova-senha" type="password" placeholder="Digite a nova senha" value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} disabled={!isEditing} className="pl-10" />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="nova-senha">Nova senha</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        id="nova-senha"
-                        type="password"
-                        placeholder="Digite a nova senha"
-                        disabled={!isEditing}
-                        className="pl-10"
-                      />
-                    </div>
-                  </div>
+                  {isEditing && <p className="text-xs text-muted-foreground">Deixe em branco para manter a senha atual</p>}
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Informações do plano */}
           <Card>
             <CardHeader>
               <CardTitle>Seu Plano</CardTitle>
@@ -145,101 +173,79 @@ export default function PerfilPage() {
                     <span className="text-lg font-semibold text-foreground">Plano Premium</span>
                     <Badge className="bg-primary">Ativo</Badge>
                   </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Acesso ilimitado a todos os recursos
-                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">Acesso ilimitado a todos os recursos</p>
                 </div>
                 <Button variant="outline">Gerenciar</Button>
               </div>
-
               <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                <div className="rounded-lg border border-border p-4 text-center">
-                  <p className="text-2xl font-bold text-primary">Ilimitado</p>
-                  <p className="text-xs text-muted-foreground">Simulados</p>
-                </div>
-                <div className="rounded-lg border border-border p-4 text-center">
-                  <p className="text-2xl font-bold text-primary">15.000+</p>
-                  <p className="text-xs text-muted-foreground">Questões</p>
-                </div>
-                <div className="rounded-lg border border-border p-4 text-center">
-                  <p className="text-2xl font-bold text-primary">24/7</p>
-                  <p className="text-xs text-muted-foreground">Suporte</p>
-                </div>
+                {[["Ilimitado","Simulados"],["528+","Questões"],["24/7","Suporte"]].map(([v,l]) => (
+                  <div key={l} className="rounded-lg border border-border p-4 text-center">
+                    <p className="text-2xl font-bold text-primary">{v}</p>
+                    <p className="text-xs text-muted-foreground">{l}</p>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Coluna lateral */}
         <div className="space-y-6">
-          {/* Estatísticas */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Suas Conquistas</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Suas Conquistas</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                  <Trophy className="h-5 w-5 text-primary" />
+              {[
+                { icon: Trophy, value: stats.simuladosFeitos, label: "Simulados realizados" },
+                { icon: BookOpen, value: stats.questoesResolvidas.toLocaleString("pt-BR"), label: "Questões resolvidas" },
+                { icon: Target, value: `${stats.taxaAcerto}%`, label: "Taxa de acerto geral" },
+              ].map(({ icon: Icon, value, label }) => (
+                <div key={label} className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                    <Icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">{value}</p>
+                    <p className="text-xs text-muted-foreground">{label}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-foreground">{userData.estatisticas.simuladosFeitos}</p>
-                  <p className="text-xs text-muted-foreground">Simulados realizados</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                  <BookOpen className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">{userData.estatisticas.questoesResolvidas}</p>
-                  <p className="text-xs text-muted-foreground">Questões resolvidas</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                  <Target className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">{userData.estatisticas.taxaAcerto}%</p>
-                  <p className="text-xs text-muted-foreground">Taxa de acerto geral</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                  <Calendar className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">{userData.estatisticas.diasSequencia} dias</p>
-                  <p className="text-xs text-muted-foreground">Sequência ativa</p>
-                </div>
-              </div>
+              ))}
             </CardContent>
           </Card>
 
-          {/* Informações da conta */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Informações da Conta</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Informações da Conta</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Membro desde</span>
-                <span className="text-sm font-medium text-foreground">{userData.dataCadastro}</span>
+                <span className="text-sm font-medium text-foreground">{dataCadastro}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Status</span>
-                <Badge variant="secondary" className="bg-primary/10 text-primary">
-                  Ativo
-                </Badge>
+                <Badge variant="secondary" className="bg-primary/10 text-primary">Ativo</Badge>
               </div>
+              <Separator />
+              <Button
+                variant="ghost"
+                className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => setConfirmSair(true)}
+              >
+                Sair da conta
+              </Button>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmSair}
+        onOpenChange={setConfirmSair}
+        title="Sair da conta?"
+        description="Você será redirecionado para a página de login."
+        confirmLabel="Sair"
+        onConfirm={async () => {
+          await supabase.auth.signOut()
+          window.location.href = "/login"
+        }}
+      />
     </div>
   )
 }

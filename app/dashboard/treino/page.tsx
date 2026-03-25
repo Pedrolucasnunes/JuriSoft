@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,99 +8,312 @@ import { Progress } from "@/components/ui/progress"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Dumbbell, Target, Lightbulb, Play, AlertTriangle, TrendingUp } from "lucide-react"
+import { RadioGroupItem as AltRadio } from "@/components/ui/radio-group"
+import {
+  Dumbbell, Target, Lightbulb, Play, TrendingUp,
+  ChevronLeft, ChevronRight, CheckCircle2, XCircle, Loader2
+} from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
 const treinoOptions = [
-  { value: "10", label: "10 questões", description: "Treino rápido (15-20 min)" },
-  { value: "20", label: "20 questões", description: "Treino médio (30-40 min)" },
-  { value: "30", label: "30 questões", description: "Treino completo (45-60 min)" },
+  { value: "10", label: "10", description: "Treino rápido (15-20 min)" },
+  { value: "20", label: "20", description: "Treino médio (30-40 min)" },
+  { value: "30", label: "30", description: "Treino completo (45-60 min)" },
 ]
 
-const materiasParaTreinar = [
-  {
-    name: "Processo Penal",
-    percentage: 45,
-    questoesDisponiveis: 234,
-    status: "crítico",
-    recomendacao: "Foque em: recursos e nulidades",
-  },
-  {
-    name: "Direito Penal",
-    percentage: 55,
-    questoesDisponiveis: 312,
-    status: "alerta",
-    recomendacao: "Revise: teoria do crime e concurso de pessoas",
-  },
-  {
-    name: "Direito Administrativo",
-    percentage: 58,
-    questoesDisponiveis: 287,
-    status: "alerta",
-    recomendacao: "Pratique: atos administrativos e licitações",
-  },
-  {
-    name: "Direito Constitucional",
-    percentage: 62,
-    questoesDisponiveis: 456,
-    status: "atenção",
-    recomendacao: "Aprofunde: controle de constitucionalidade",
-  },
-]
+interface MateriasRisco {
+  subject_id: string
+  nome: string
+  taxa: number
+  total?: number
+}
 
-const ultimosTreinos = [
-  {
-    id: 1,
-    data: "Hoje, 14:30",
-    questoes: 20,
-    acertos: 14,
-    materias: ["Processo Penal", "Penal"],
-    tempo: "28 min",
-  },
-  {
-    id: 2,
-    data: "Ontem, 10:15",
-    questoes: 10,
-    acertos: 8,
-    materias: ["Administrativo"],
-    tempo: "12 min",
-  },
-  {
-    id: 3,
-    data: "20 Jan, 16:45",
-    questoes: 30,
-    acertos: 21,
-    materias: ["Constitucional", "Civil"],
-    tempo: "42 min",
-  },
-]
+interface QuestaoTreino {
+  id: string
+  enunciado: string
+  alternativa_a: string
+  alternativa_b: string
+  alternativa_c: string
+  alternativa_d: string
+  subject_name: string
+}
+
+interface TreinoAtivo {
+  questoes: QuestaoTreino[]
+  distribuicao: { total: number; risco: number; geral: number }
+}
+
+interface Progresso {
+  totalRespondidas: number
+  taxaGeralAcerto: number
+}
 
 export default function TreinoPage() {
-  const [quantidadeQuestoes, setQuantidadeQuestoes] = useState("20")
-  const [treinoIniciado, setTreinoIniciado] = useState(false)
+  const [userId, setUserId] = useState<string>("")
+  const [quantidadeQuestoes, setQuantidadeQuestoes] = useState("10")
+  const [materiasRisco, setMateriasRisco] = useState<MateriasRisco[]>([])
+  const [progresso, setProgresso] = useState<Progresso | null>(null)
+  const [loadingDados, setLoadingDados] = useState(true)
+
+  // Estado do treino ativo
+  const [treinoAtivo, setTreinoAtivo] = useState<TreinoAtivo | null>(null)
+  const [iniciando, setIniciando] = useState(false)
+  const [currentQuestion, setCurrentQuestion] = useState(0)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [respostas, setRespostas] = useState<Record<string, { acertou: boolean; correta: string }>>({})
+  const [verificando, setVerificando] = useState(false)
+
+  useEffect(() => {
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      setUserId(user.id)
+
+      // Busca dados do dashboard para matérias em risco e progresso
+      const res = await fetch(`/api/dashboard?userId=${user.id}`)
+      const data = await res.json()
+
+      if (res.ok) {
+        setMateriasRisco(data.materiasRisco ?? [])
+        setProgresso(data.resumo ?? null)
+      }
+
+      setLoadingDados(false)
+    }
+    init()
+  }, [])
+
+  const iniciarTreino = async () => {
+    if (!userId) return
+    setIniciando(true)
+
+    const res = await fetch("/api/treino", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, quantidade: Number(quantidadeQuestoes) }),
+    })
+
+    const data = await res.json()
+    setIniciando(false)
+
+    if (!res.ok) { alert(data.error); return }
+
+    setTreinoAtivo(data)
+    setCurrentQuestion(0)
+    setAnswers({})
+    setRespostas({})
+  }
+
+  const handleVerificar = async () => {
+    if (!treinoAtivo || !userId) return
+    const questao = treinoAtivo.questoes[currentQuestion]
+    const resposta = answers[questao.id]
+    if (!resposta) return
+
+    setVerificando(true)
+
+    const res = await fetch("/api/simulados/resposta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        questionId: questao.id,
+        simuladoId: null,
+        resposta,
+      }),
+    })
+
+    const data = await res.json()
+    setVerificando(false)
+
+    if (res.ok) {
+      setRespostas((prev) => ({
+        ...prev,
+        [questao.id]: { acertou: data.acertou, correta: data.resposta_correta },
+      }))
+    }
+  }
+
+  const encerrarTreino = () => {
+    setTreinoAtivo(null)
+    setAnswers({})
+    setRespostas({})
+    setCurrentQuestion(0)
+    // Recarrega progresso
+    if (userId) {
+      fetch(`/api/dashboard?userId=${userId}`)
+        .then(r => r.json())
+        .then(d => { if (d.resumo) setProgresso(d.resumo) })
+    }
+  }
+
+  // ─── MODO TREINO ATIVO ────────────────────────────────────────
+  if (treinoAtivo) {
+    const questao = treinoAtivo.questoes[currentQuestion]
+    const respostaAtual = answers[questao.id]
+    const feedbackAtual = respostas[questao.id]
+    const jaRespondida = !!feedbackAtual
+    const respondidas = Object.keys(respostas).length
+    const total = treinoAtivo.questoes.length
+
+    const alternativas = [
+      { letra: "A", texto: questao.alternativa_a },
+      { letra: "B", texto: questao.alternativa_b },
+      { letra: "C", texto: questao.alternativa_c },
+      { letra: "D", texto: questao.alternativa_d },
+    ]
+
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-foreground">Treino Estratégico</h1>
+            <p className="text-sm text-muted-foreground">
+              Questão {currentQuestion + 1} de {total} — {respondidas} respondidas
+            </p>
+          </div>
+          <Button variant="outline" onClick={encerrarTreino}>
+            Encerrar treino
+          </Button>
+        </div>
+
+        {/* Progresso */}
+        <Progress value={(respondidas / total) * 100} className="h-2" />
+
+        {/* Distribuição */}
+        <div className="flex gap-3 text-xs text-muted-foreground">
+          <span className="rounded-full bg-destructive/10 px-3 py-1 text-destructive">
+            {treinoAtivo.distribuicao.risco} matérias em risco
+          </span>
+          <span className="rounded-full bg-secondary px-3 py-1">
+            {treinoAtivo.distribuicao.geral} gerais
+          </span>
+        </div>
+
+        {/* Questão */}
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <Badge variant="secondary">{questao.subject_name}</Badge>
+            </div>
+
+            <p className="text-foreground leading-relaxed">{questao.enunciado}</p>
+
+            <RadioGroup
+              value={respostaAtual || ""}
+              onValueChange={(v) => {
+                if (jaRespondida) return
+                setAnswers((prev) => ({ ...prev, [questao.id]: v }))
+              }}
+              className="space-y-2"
+            >
+              {alternativas.map((alt) => (
+                <div
+                  key={alt.letra}
+                  className={`flex items-start gap-3 rounded-lg border p-3 transition-colors ${
+                    jaRespondida
+                      ? alt.letra === feedbackAtual.correta
+                        ? "border-primary bg-primary/5"
+                        : respostaAtual === alt.letra
+                        ? "border-destructive bg-destructive/5"
+                        : "border-border"
+                      : respostaAtual === alt.letra
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <AltRadio value={alt.letra} id={`alt-${alt.letra}`} className="mt-0.5" disabled={jaRespondida} />
+                  <Label htmlFor={`alt-${alt.letra}`} className="flex-1 cursor-pointer text-sm text-foreground">
+                    <span className="font-medium">{alt.letra})</span> {alt.texto}
+                  </Label>
+                  {jaRespondida && alt.letra === feedbackAtual.correta && (
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-primary" />
+                  )}
+                  {jaRespondida && respostaAtual === alt.letra && alt.letra !== feedbackAtual.correta && (
+                    <XCircle className="h-5 w-5 shrink-0 text-destructive" />
+                  )}
+                </div>
+              ))}
+            </RadioGroup>
+
+            {/* Feedback */}
+            {jaRespondida && (
+              <div className="rounded-lg border border-border bg-secondary/30 p-4">
+                <div className="flex items-center gap-2">
+                  {feedbackAtual.acertou
+                    ? <><CheckCircle2 className="h-5 w-5 text-primary" /><span className="font-medium text-primary">Resposta correta!</span></>
+                    : <><XCircle className="h-5 w-5 text-destructive" /><span className="font-medium text-destructive">Resposta incorreta — gabarito: {feedbackAtual.correta}</span></>
+                  }
+                </div>
+              </div>
+            )}
+
+            {/* Navegação */}
+            <div className="flex items-center justify-between pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setCurrentQuestion((p) => p - 1)}
+                disabled={currentQuestion === 0}
+              >
+                <ChevronLeft className="mr-2 h-4 w-4" /> Anterior
+              </Button>
+
+              {!jaRespondida ? (
+                <Button onClick={handleVerificar} disabled={!respostaAtual || verificando}>
+                  {verificando
+                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando...</>
+                    : "Verificar resposta"
+                  }
+                </Button>
+              ) : currentQuestion < total - 1 ? (
+                <Button onClick={() => setCurrentQuestion((p) => p + 1)}>
+                  Próxima <ChevronRight className="ml-2 h-4 w-4" />
+                </Button>
+              ) : (
+                <Button onClick={encerrarTreino} className="bg-primary">
+                  <CheckCircle2 className="mr-2 h-4 w-4" /> Concluir treino
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // ─── TELA INICIAL ─────────────────────────────────────────────
+  const pioresmaterias = materiasRisco.slice(0, 2)
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Treino Estratégico</h1>
-        <p className="text-muted-foreground">
-          Questões personalizadas baseadas no seu desempenho
-        </p>
+        <p className="text-muted-foreground">Questões personalizadas baseadas no seu desempenho</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Coluna principal */}
         <div className="space-y-6 lg:col-span-2">
-          {/* Alerta de recomendação */}
-          <Alert className="border-warning/50 bg-warning/5">
-            <Lightbulb className="h-4 w-4 text-warning" />
-            <AlertTitle className="text-warning">Recomendação inteligente</AlertTitle>
-            <AlertDescription className="text-muted-foreground">
-              Você errou várias questões sobre <strong>controle de constitucionalidade</strong> e{" "}
-              <strong>recursos no processo penal</strong>. Recomendamos revisar estes temas antes de continuar.
-            </AlertDescription>
-          </Alert>
 
-          {/* Card de iniciar treino */}
+          {/* Recomendação inteligente */}
+          {pioresmaterias.length > 0 && (
+            <Alert className="border-warning/50 bg-warning/5">
+              <Lightbulb className="h-4 w-4 text-warning" />
+              <AlertTitle className="text-warning">Recomendação inteligente</AlertTitle>
+              <AlertDescription className="text-muted-foreground">
+                Você errou várias questões sobre{" "}
+                {pioresmaterias.map((m, i) => (
+                  <span key={m.subject_id}>
+                    <strong>{m.nome}</strong>
+                    {i < pioresmaterias.length - 1 ? " e " : ""}
+                  </span>
+                ))}
+                . Recomendamos revisar estes temas antes de continuar.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Card iniciar treino */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -123,16 +336,12 @@ export default function TreinoPage() {
                 >
                   {treinoOptions.map((option) => (
                     <div key={option.value}>
-                      <RadioGroupItem
-                        value={option.value}
-                        id={`treino-${option.value}`}
-                        className="peer sr-only"
-                      />
+                      <RadioGroupItem value={option.value} id={`treino-${option.value}`} className="peer sr-only" />
                       <Label
                         htmlFor={`treino-${option.value}`}
                         className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-border p-4 transition-all peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 hover:bg-secondary"
                       >
-                        <span className="text-2xl font-bold text-foreground">{option.value}</span>
+                        <span className="text-2xl font-bold text-foreground">{option.label}</span>
                         <span className="text-xs text-muted-foreground">{option.description}</span>
                       </Label>
                     </div>
@@ -141,9 +350,7 @@ export default function TreinoPage() {
               </div>
 
               <div className="rounded-lg border border-border bg-secondary/30 p-4">
-                <h4 className="mb-3 text-sm font-medium text-foreground">
-                  Distribuição do treino
-                </h4>
+                <h4 className="mb-3 text-sm font-medium text-foreground">Distribuição do treino</h4>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Matérias em risco (70%)</span>
@@ -160,9 +367,11 @@ export default function TreinoPage() {
                 </div>
               </div>
 
-              <Button className="w-full" size="lg">
-                <Play className="mr-2 h-5 w-5" />
-                Iniciar treino com {quantidadeQuestoes} questões
+              <Button className="w-full" size="lg" onClick={iniciarTreino} disabled={iniciando}>
+                {iniciando
+                  ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Preparando treino...</>
+                  : <><Play className="mr-2 h-5 w-5" /> Iniciar treino com {quantidadeQuestoes} questões</>
+                }
               </Button>
             </CardContent>
           </Card>
@@ -174,108 +383,80 @@ export default function TreinoPage() {
                 <Target className="h-5 w-5 text-primary" />
                 Matérias para treinar
               </CardTitle>
-              <CardDescription>
-                Baseado no seu desempenho nos últimos 30 dias
-              </CardDescription>
+              <CardDescription>Baseado no seu desempenho nos últimos 30 dias</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {materiasParaTreinar.map((materia) => (
-                  <div
-                    key={materia.name}
-                    className="flex items-start justify-between gap-4 rounded-lg border border-border p-4"
-                  >
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-foreground">{materia.name}</span>
-                        <Badge
-                          variant={
-                            materia.status === "crítico"
-                              ? "destructive"
-                              : materia.status === "alerta"
-                              ? "default"
-                              : "secondary"
-                          }
-                          className={
-                            materia.status === "alerta"
-                              ? "bg-warning text-warning-foreground"
-                              : ""
-                          }
-                        >
-                          {materia.status}
-                        </Badge>
+              {loadingDados ? (
+                <div className="flex items-center justify-center h-24">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : materiasRisco.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Responda mais questões para identificar suas matérias em risco.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {materiasRisco.map((materia) => {
+                    const taxa = Number(materia.taxa)
+                    const status = taxa < 55 ? "crítico" : taxa < 70 ? "alerta" : "atenção"
+                    return (
+                      <div key={materia.subject_id} className="flex items-start justify-between gap-4 rounded-lg border border-border p-4">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-foreground">{materia.nome}</span>
+                            <Badge
+                              variant={status === "crítico" ? "destructive" : "default"}
+                              className={status === "alerta" ? "bg-warning text-warning-foreground" : status === "atenção" ? "bg-secondary text-secondary-foreground" : ""}
+                            >
+                              {status}
+                            </Badge>
+                          </div>
+                          <Progress
+                            value={taxa}
+                            className={`h-2 ${taxa < 60 ? "[&>div]:bg-destructive" : taxa < 70 ? "[&>div]:bg-warning" : ""}`}
+                          />
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-foreground">{taxa.toFixed(0)}%</p>
+                          <p className="text-xs text-muted-foreground">de acerto</p>
+                        </div>
                       </div>
-                      <Progress
-                        value={materia.percentage}
-                        className={`h-2 ${materia.percentage < 60 ? "[&>div]:bg-destructive" : materia.percentage < 70 ? "[&>div]:bg-warning" : ""}`}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {materia.recomendacao}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-foreground">{materia.percentage}%</p>
-                      <p className="text-xs text-muted-foreground">
-                        {materia.questoesDisponiveis} questões
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                    )
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
         {/* Coluna lateral */}
         <div className="space-y-6">
-          {/* Estatísticas de treino */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Seu progresso</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Questões esta semana</span>
-                <span className="text-lg font-bold text-foreground">127</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Taxa de acerto</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-lg font-bold text-foreground">72%</span>
-                  <TrendingUp className="h-4 w-4 text-primary" />
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Sequência</span>
-                <span className="text-lg font-bold text-foreground">5 dias</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Últimos treinos */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Últimos treinos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {ultimosTreinos.map((treino) => (
-                  <div
-                    key={treino.id}
-                    className="flex items-center justify-between border-b border-border pb-3 last:border-0 last:pb-0"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-foreground">
-                        {treino.acertos}/{treino.questoes} acertos
-                      </p>
-                      <p className="text-xs text-muted-foreground">{treino.data}</p>
-                    </div>
-                    <Badge variant="secondary">
-                      {Math.round((treino.acertos / treino.questoes) * 100)}%
-                    </Badge>
+              {loadingDados ? (
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Questões respondidas</span>
+                    <span className="text-lg font-bold text-foreground">
+                      {progresso?.totalRespondidas?.toLocaleString("pt-BR") ?? "0"}
+                    </span>
                   </div>
-                ))}
-              </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Taxa de acerto</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-lg font-bold text-foreground">
+                        {progresso?.taxaGeralAcerto ?? 0}%
+                      </span>
+                      <TrendingUp className="h-4 w-4 text-primary" />
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

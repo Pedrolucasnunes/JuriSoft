@@ -8,20 +8,38 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Scale, ArrowLeft, Eye, EyeOff } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
 export default function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
-    
-    // Simula login
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    
-    router.push("/dashboard")
+    setError(null)
+
+    const formData = new FormData(e.currentTarget)
+    const email = formData.get("email") as string
+    const password = formData.get("password") as string
+
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (authError) {
+      setError("E-mail ou senha incorretos. Tente novamente.")
+      setIsLoading(false)
+      return
+    }
+
+    // Redireciona para a rota original ou dashboard
+    const params = new URLSearchParams(window.location.search)
+    const redirect = params.get("redirect") ?? "/dashboard"
+    router.push(redirect)
   }
 
   return (
@@ -58,6 +76,7 @@ export default function LoginPage() {
                 <Label htmlFor="email">E-mail</Label>
                 <Input
                   id="email"
+                  name="email"
                   type="email"
                   placeholder="seu@email.com"
                   required
@@ -78,6 +97,7 @@ export default function LoginPage() {
                 <div className="relative">
                   <Input
                     id="password"
+                    name="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="Digite sua senha"
                     required
@@ -96,6 +116,11 @@ export default function LoginPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Mensagem de erro */}
+              {error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
 
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Entrando..." : "Entrar"}

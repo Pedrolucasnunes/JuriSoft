@@ -1,105 +1,206 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { TrendingUp, TrendingDown, Target, Clock, BookOpen, Zap } from "lucide-react"
+import { TrendingUp, TrendingDown, Target, BookOpen, Zap, Loader2 } from "lucide-react"
 import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Legend,
-  RadialBarChart,
-  RadialBar,
+  Area, AreaChart, Bar, BarChart, ResponsiveContainer,
+  XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from "recharts"
+import { supabase } from "@/lib/supabase"
 
-// Dados de simulados
-const evolutionSimulados = [
-  { date: "Jan", nota: 45, meta: 50 },
-  { date: "Fev", nota: 52, meta: 50 },
-  { date: "Mar", nota: 48, meta: 50 },
-  { date: "Abr", nota: 58, meta: 50 },
-  { date: "Mai", nota: 62, meta: 50 },
-  { date: "Jun", nota: 68, meta: 50 },
-]
-
-const disciplinePerformance = [
-  { name: "Ética", acerto: 85, questoes: 120, meta: 70 },
-  { name: "Constitucional", acerto: 62, questoes: 180, meta: 70 },
-  { name: "Civil", acerto: 70, questoes: 200, meta: 70 },
-  { name: "Penal", acerto: 55, questoes: 150, meta: 70 },
-  { name: "Proc. Civil", acerto: 72, questoes: 165, meta: 70 },
-  { name: "Proc. Penal", acerto: 45, questoes: 140, meta: 70 },
-  { name: "Trabalho", acerto: 68, questoes: 95, meta: 70 },
-  { name: "Administrativo", acerto: 58, questoes: 130, meta: 70 },
-  { name: "Tributário", acerto: 65, questoes: 80, meta: 70 },
-  { name: "Empresarial", acerto: 72, questoes: 70, meta: 70 },
-  { name: "D. Humanos", acerto: 78, questoes: 55, meta: 70 },
-  { name: "Estatuto OAB", acerto: 82, questoes: 85, meta: 70 },
-]
-
-const riskMatrix = [
-  { name: "Processo Penal", risk: "alto", percentage: 45, trend: -5, questions: 140 },
-  { name: "Direito Penal", risk: "alto", percentage: 55, trend: 3, questions: 150 },
-  { name: "Administrativo", risk: "médio", percentage: 58, trend: 5, questions: 130 },
-  { name: "Constitucional", risk: "médio", percentage: 62, trend: 4, questions: 180 },
-  { name: "Trabalho", risk: "baixo", percentage: 68, trend: 2, questions: 95 },
-  { name: "Civil", risk: "baixo", percentage: 70, trend: 1, questions: 200 },
-  { name: "Proc. Civil", risk: "baixo", percentage: 72, trend: 3, questions: 165 },
-  { name: "D. Humanos", risk: "baixo", percentage: 78, trend: 5, questions: 55 },
-  { name: "Estatuto OAB", risk: "baixo", percentage: 82, trend: 2, questions: 85 },
-  { name: "Ética", risk: "baixo", percentage: 85, trend: 1, questions: 120 },
-]
-
-// Dados de questões avulsas
-const questoesStats = {
-  total: 1470,
-  acertos: 985,
-  erros: 485,
-  taxaAcerto: 67,
-  eficiencia: 23, // questões por 1% de aumento
-  tempoMedio: "2min 45s",
-  sequencia: 5,
+function getRiskColor(taxa: number) {
+  if (taxa < 55) return "bg-destructive text-destructive-foreground"
+  if (taxa < 70) return "bg-warning text-warning-foreground"
+  return "bg-primary text-primary-foreground"
 }
 
-const weeklyProgress = [
-  { dia: "Seg", questoes: 45, acertos: 32 },
-  { dia: "Ter", questoes: 38, acertos: 28 },
-  { dia: "Qua", questoes: 52, acertos: 38 },
-  { dia: "Qui", questoes: 41, acertos: 30 },
-  { dia: "Sex", questoes: 35, acertos: 26 },
-  { dia: "Sáb", questoes: 60, acertos: 45 },
-  { dia: "Dom", questoes: 48, acertos: 35 },
-]
-
-function getRiskColor(risk: string) {
-  switch (risk) {
-    case "alto":
-      return "bg-destructive text-destructive-foreground"
-    case "médio":
-      return "bg-warning text-warning-foreground"
-    case "baixo":
-      return "bg-primary text-primary-foreground"
-    default:
-      return "bg-secondary text-secondary-foreground"
-  }
+function getRiskLabel(taxa: number) {
+  if (taxa < 55) return "alto"
+  if (taxa < 70) return "médio"
+  return "baixo"
 }
 
 export default function DesempenhoPage() {
+  const [loading, setLoading] = useState(true)
+  const [evolutionData, setEvolutionData] = useState<any[]>([])
+  const [statsSimulados, setStatsSimulados] = useState({
+    mediaAcerto: 0, totalSimulados: 0, aprovados: 0,
+    maiorNota: 0, maiorTotal: 80, maiorPercentual: 0,
+  })
+  const [statsQuestoes, setStatsQuestoes] = useState({
+    total: 0, acertos: 0, erros: 0, taxaAcerto: 0,
+  })
+  const [weeklyData, setWeeklyData] = useState<any[]>([])
+  const [desempenhoPorMateria, setDesempenhoPorMateria] = useState<any[]>([])
+  const [materiasRisco, setMateriasRisco] = useState<any[]>([])
+
+  useEffect(() => {
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      await Promise.all([
+        fetchSimulados(user.id),
+        fetchQuestoes(user.id),
+        fetchDesempenho(user.id),
+      ])
+
+      setLoading(false)
+    }
+    init()
+  }, [])
+
+  async function fetchSimulados(uid: string) {
+    const { data } = await supabase
+      .from("simulados")
+      .select("id, acertos, erros, percentual, numero_questoes, created_at")
+      .eq("user_id", uid)
+      .gt("acertos", 0)
+      .order("created_at", { ascending: true })
+
+    if (!data || data.length === 0) return
+
+    const media = data.reduce((acc, s) => acc + s.percentual, 0) / data.length
+    const melhor = data.reduce((prev, curr) => curr.percentual > prev.percentual ? curr : prev, data[0])
+    const aprovados = data.filter(s => s.percentual >= 60).length
+
+    setStatsSimulados({
+      mediaAcerto: parseFloat(media.toFixed(1)),
+      totalSimulados: data.length,
+      aprovados,
+      maiorNota: melhor.acertos,
+      maiorTotal: melhor.numero_questoes,
+      maiorPercentual: melhor.percentual,
+    })
+
+    const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    const porMes: Record<string, { soma: number; count: number }> = {}
+    data.forEach(s => {
+      const key = meses[new Date(s.created_at).getMonth()]
+      if (!porMes[key]) porMes[key] = { soma: 0, count: 0 }
+      porMes[key].soma += s.percentual
+      porMes[key].count++
+    })
+    setEvolutionData(Object.entries(porMes).map(([date, v]) => ({
+      date,
+      nota: parseFloat((v.soma / v.count).toFixed(1)),
+      meta: 60,
+    })))
+  }
+
+  async function fetchQuestoes(uid: string) {
+    const { data } = await supabase
+      .from("question_attempts")
+      .select("acertou, created_at")
+      .eq("user_id", uid)
+
+    if (!data) return
+
+    const total = data.length
+    const acertos = data.filter(q => q.acertou).length
+    setStatsQuestoes({
+      total, acertos, erros: total - acertos,
+      taxaAcerto: total > 0 ? parseFloat(((acertos / total) * 100).toFixed(2)) : 0,
+    })
+
+    const dias = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
+    const hoje = new Date()
+    const semana = []
+    for (let i = 6; i >= 0; i--) {
+      const dia = new Date(hoje)
+      dia.setDate(hoje.getDate() - i)
+      const dateStr = dia.toISOString().split("T")[0]
+      const doDia = data.filter(q => q.created_at.startsWith(dateStr))
+      semana.push({
+        dia: dias[dia.getDay()],
+        questoes: doDia.length,
+        acertos: doDia.filter(q => q.acertou).length,
+      })
+    }
+    setWeeklyData(semana)
+  }
+
+  async function fetchDesempenho(uid: string) {
+    const { data: desempenho } = await supabase
+      .from("desempenho_materia")
+      .select("subject_id, total, acertos, taxa_acerto")
+      .eq("user_id", uid)
+
+    const { data: risco } = await supabase
+      .from("materias_risco")
+      .select("subject_id, taxa")
+      .eq("user_id", uid)
+      .order("taxa", { ascending: true })
+
+    const subjectIds = [...new Set([
+      ...(desempenho ?? []).map(d => d.subject_id),
+      ...(risco ?? []).map(r => r.subject_id),
+    ])]
+
+    const { data: subjects } = await supabase
+      .from("subjects")
+      .select("id, name")
+      .in("id", subjectIds.length > 0 ? subjectIds : ["null"])
+
+    const subjectMap = Object.fromEntries((subjects ?? []).map(s => [s.id, s.name]))
+
+    // Agrupa por subject_id antes de renderizar
+    const agrupado: Record<string, { total: number; acertos: number; name: string }> = {}
+
+      ; (desempenho ?? []).forEach(d => {
+        if (!agrupado[d.subject_id]) {
+          agrupado[d.subject_id] = { total: 0, acertos: 0, name: subjectMap[d.subject_id] ?? "Desconhecida" }
+        }
+        agrupado[d.subject_id].total += d.total
+        agrupado[d.subject_id].acertos += d.acertos
+      })
+
+    setDesempenhoPorMateria(
+      Object.entries(agrupado).map(([subject_id, v]) => ({
+        subject_id,
+        name: v.name,
+        acerto: v.total > 0 ? parseFloat(((v.acertos / v.total) * 100).toFixed(1)) : 0,
+        questoes: v.total,
+      })).sort((a, b) => a.acerto - b.acerto)
+    )
+
+    // Agrupa materias_risco por subject_id
+    const riscoAgrupado: Record<string, { soma: number; count: number; name: string }> = {}
+
+      ; (risco ?? []).forEach(r => {
+        if (!riscoAgrupado[r.subject_id]) {
+          riscoAgrupado[r.subject_id] = { soma: 0, count: 0, name: subjectMap[r.subject_id] ?? "Desconhecida" }
+        }
+        riscoAgrupado[r.subject_id].soma += Number(r.taxa)
+        riscoAgrupado[r.subject_id].count++
+      })
+
+    setMateriasRisco(
+      Object.entries(riscoAgrupado).map(([subject_id, v]) => ({
+        subject_id,
+        name: v.name,
+        taxa: parseFloat((v.soma / v.count).toFixed(1)),
+      })).sort((a, b) => a.taxa - b.taxa)
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Desempenho</h1>
-        <p className="text-muted-foreground">
-          Análise completa do seu progresso e áreas de melhoria
-        </p>
+        <p className="text-muted-foreground">Análise completa do seu progresso e áreas de melhoria</p>
       </div>
 
       <Tabs defaultValue="simulados">
@@ -108,302 +209,212 @@ export default function DesempenhoPage() {
           <TabsTrigger value="questoes">Questões Avulsas</TabsTrigger>
         </TabsList>
 
-        {/* Tab Simulados */}
         <TabsContent value="simulados" className="mt-6 space-y-6">
-          {/* Cards de estatísticas */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Média de Acertos
-                </CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Média de Acertos</CardTitle>
                 <Target className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold text-foreground">67%</span>
-                  <span className="flex items-center text-xs font-medium text-primary">
-                    <TrendingUp className="mr-1 h-3 w-3" />
-                    +5%
+                  <span className="text-2xl font-bold text-foreground">{statsSimulados.mediaAcerto}%</span>
+                  <span className={`flex items-center text-xs font-medium ${statsSimulados.mediaAcerto >= 60 ? "text-primary" : "text-destructive"}`}>
+                    {statsSimulados.mediaAcerto >= 60 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">Meta: 50% para aprovação</p>
+                <p className="mt-1 text-xs text-muted-foreground">Meta: 60% para aprovação</p>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Simulados Realizados
-                </CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Simulados Realizados</CardTitle>
                 <BookOpen className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">12</div>
-                <p className="mt-1 text-xs text-muted-foreground">6 acima de 50%</p>
+                <div className="text-2xl font-bold text-foreground">{statsSimulados.totalSimulados}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{statsSimulados.aprovados} acima de 60%</p>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Tempo Médio/Questão
-                </CardTitle>
-                <Clock className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-foreground">3:24</div>
-                <p className="mt-1 text-xs text-muted-foreground">Meta: 3:45 por questão</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Maior Nota
-                </CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Maior Nota</CardTitle>
                 <Zap className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">68/80</div>
-                <p className="mt-1 text-xs text-muted-foreground">85% de aproveitamento</p>
+                <div className="text-2xl font-bold text-foreground">{statsSimulados.maiorNota}/{statsSimulados.maiorTotal}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{statsSimulados.maiorPercentual}% de aproveitamento</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Taxa de Aprovação</CardTitle>
+                <Target className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-foreground">
+                  {statsSimulados.totalSimulados > 0 ? Math.round((statsSimulados.aprovados / statsSimulados.totalSimulados) * 100) : 0}%
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{statsSimulados.aprovados} de {statsSimulados.totalSimulados} simulados</p>
               </CardContent>
             </Card>
           </div>
 
-          {/* Gráfico de evolução */}
           <Card>
             <CardHeader>
               <CardTitle>Evolução das Notas</CardTitle>
               <CardDescription>Sua performance nos simulados ao longo do tempo</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={evolutionSimulados}>
-                    <defs>
-                      <linearGradient id="colorNota2" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
-                    <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" domain={[0, 100]} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                      labelStyle={{ color: "hsl(var(--foreground))" }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="nota"
-                      stroke="var(--chart-1)"
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#colorNota2)"
-                      name="Nota"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="meta"
-                      stroke="hsl(var(--muted-foreground))"
-                      strokeWidth={1}
-                      strokeDasharray="5 5"
-                      fillOpacity={0}
-                      name="Meta"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+              {evolutionData.length === 0 ? (
+                <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">Realize simulados para ver sua evolução</div>
+              ) : (
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={evolutionData}>
+                      <defs>
+                        <linearGradient id="colorNota2" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
+                      <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" domain={[0, 100]} />
+                      <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} labelStyle={{ color: "hsl(var(--foreground))" }} />
+                      <Area type="monotone" dataKey="nota" stroke="var(--chart-1)" strokeWidth={2} fillOpacity={1} fill="url(#colorNota2)" name="Nota" />
+                      <Area type="monotone" dataKey="meta" stroke="hsl(var(--muted-foreground))" strokeWidth={1} strokeDasharray="5 5" fillOpacity={0} name="Meta (60%)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Matriz de risco */}
           <Card>
             <CardHeader>
               <CardTitle>Índice de Risco de Reprovação</CardTitle>
               <CardDescription>Análise por disciplina baseada no seu desempenho</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {riskMatrix.map((discipline) => (
-                  <div
-                    key={discipline.name}
-                    className="flex items-center gap-4 rounded-lg border border-border p-3"
-                  >
-                    <Badge className={getRiskColor(discipline.risk)}>
-                      {discipline.risk}
-                    </Badge>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-foreground">{discipline.name}</span>
-                        <span className="text-sm text-muted-foreground">
-                          {discipline.questions} questões
-                        </span>
-                      </div>
-                      <div className="mt-1 flex items-center gap-2">
-                        <Progress
-                          value={discipline.percentage}
-                          className={`h-2 flex-1 ${
-                            discipline.percentage < 60
-                              ? "[&>div]:bg-destructive"
-                              : discipline.percentage < 70
-                              ? "[&>div]:bg-warning"
-                              : ""
-                          }`}
-                        />
-                        <span className="w-12 text-right text-sm font-medium text-foreground">
-                          {discipline.percentage}%
-                        </span>
-                        <span
-                          className={`flex items-center text-xs ${
-                            discipline.trend >= 0 ? "text-primary" : "text-destructive"
-                          }`}
-                        >
-                          {discipline.trend >= 0 ? (
-                            <TrendingUp className="h-3 w-3" />
-                          ) : (
-                            <TrendingDown className="h-3 w-3" />
-                          )}
-                          {Math.abs(discipline.trend)}%
-                        </span>
+              {materiasRisco.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Responda questões para ver sua análise de risco.</p>
+              ) : (
+                <div className="space-y-3">
+                  {materiasRisco.map((m, i) => (
+                    <div key={`${m.subject_id}-${i}`} className="flex items-center gap-4 rounded-lg border border-border p-3">
+                      <Badge className={getRiskColor(m.taxa)}>{getRiskLabel(m.taxa)}</Badge>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-foreground">{m.name}</span>
+                          <span className="text-sm font-medium text-foreground">{m.taxa}%</span>
+                        </div>
+                        <Progress value={m.taxa} className={`mt-1 h-2 ${m.taxa < 60 ? "[&>div]:bg-destructive" : m.taxa < 70 ? "[&>div]:bg-warning" : ""}`} />
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Tab Questões Avulsas */}
         <TabsContent value="questoes" className="mt-6 space-y-6">
-          {/* Cards de estatísticas */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total Resolvidas
-                </CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Resolvidas</CardTitle>
                 <BookOpen className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">{questoesStats.total}</div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {questoesStats.acertos} acertos / {questoesStats.erros} erros
-                </p>
+                <div className="text-2xl font-bold text-foreground">{statsQuestoes.total.toLocaleString("pt-BR")}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{statsQuestoes.acertos} acertos / {statsQuestoes.erros} erros</p>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Taxa de Acerto
-                </CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Taxa de Acerto</CardTitle>
                 <Target className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold text-foreground">{questoesStats.taxaAcerto}%</span>
-                  <span className="flex items-center text-xs font-medium text-primary">
-                    <TrendingUp className="mr-1 h-3 w-3" />
-                    +3%
+                  <span className="text-2xl font-bold text-foreground">{statsQuestoes.taxaAcerto}%</span>
+                  <span className={`flex items-center text-xs font-medium ${statsQuestoes.taxaAcerto >= 60 ? "text-primary" : "text-destructive"}`}>
+                    {statsQuestoes.taxaAcerto >= 60 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">Últimos 30 dias</p>
+                <p className="mt-1 text-xs text-muted-foreground">Taxa geral acumulada</p>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Eficiência de Estudo
-                </CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Acertos</CardTitle>
                 <Zap className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">{questoesStats.eficiencia}</div>
-                <p className="mt-1 text-xs text-muted-foreground">Questões por 1% de aumento</p>
+                <div className="text-2xl font-bold text-foreground">{statsQuestoes.acertos.toLocaleString("pt-BR")}</div>
+                <p className="mt-1 text-xs text-muted-foreground">Total de acertos</p>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Sequência Ativa
-                </CardTitle>
-                <Zap className="h-4 w-4 text-primary" />
+                <CardTitle className="text-sm font-medium text-muted-foreground">Erros</CardTitle>
+                <Zap className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">{questoesStats.sequencia} dias</div>
-                <p className="mt-1 text-xs text-muted-foreground">Continue assim!</p>
+                <div className="text-2xl font-bold text-destructive">{statsQuestoes.erros.toLocaleString("pt-BR")}</div>
+                <p className="mt-1 text-xs text-muted-foreground">Total de erros</p>
               </CardContent>
             </Card>
           </div>
 
-          {/* Gráfico semanal */}
           <Card>
             <CardHeader>
               <CardTitle>Atividade Semanal</CardTitle>
               <CardDescription>Questões respondidas nos últimos 7 dias</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={weeklyProgress}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                    <XAxis dataKey="dia" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
-                    <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                      labelStyle={{ color: "hsl(var(--foreground))" }}
-                    />
-                    <Legend />
-                    <Bar dataKey="questoes" fill="var(--chart-2)" name="Total" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="acertos" fill="var(--chart-1)" name="Acertos" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              {weeklyData.every(d => d.questoes === 0) ? (
+                <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">Nenhuma atividade nos últimos 7 dias</div>
+              ) : (
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={weeklyData}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
+                      <XAxis dataKey="dia" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
+                      <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
+                      <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} labelStyle={{ color: "hsl(var(--foreground))" }} />
+                      <Legend />
+                      <Bar dataKey="questoes" fill="var(--chart-2)" name="Total" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="acertos" fill="var(--chart-1)" name="Acertos" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Taxa de acerto por disciplina */}
           <Card>
             <CardHeader>
               <CardTitle>Desempenho por Disciplina</CardTitle>
               <CardDescription>Taxa de acerto em questões avulsas</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {disciplinePerformance.map((discipline) => (
-                  <div key={discipline.name} className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-foreground">{discipline.name}</span>
-                      <span className="text-muted-foreground">
-                        {discipline.acerto}% ({discipline.questoes} questões)
-                      </span>
+              {desempenhoPorMateria.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Responda questões para ver seu desempenho por disciplina.</p>
+              ) : (
+                <div className="space-y-3">
+                  {desempenhoPorMateria.map((d, i) => (
+                    <div key={`${d.subject_id}-${i}`} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-foreground">{d.name}</span>
+                        <span className="text-muted-foreground">{d.acerto}% ({d.questoes} questões)</span>
+                      </div>
+                      <Progress value={d.acerto} className={`h-2 ${d.acerto < 60 ? "[&>div]:bg-destructive" : d.acerto < 70 ? "[&>div]:bg-warning" : ""}`} />
                     </div>
-                    <Progress
-                      value={discipline.acerto}
-                      className={`h-2 ${
-                        discipline.acerto < 60
-                          ? "[&>div]:bg-destructive"
-                          : discipline.acerto < 70
-                          ? "[&>div]:bg-warning"
-                          : ""
-                      }`}
-                    />
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
