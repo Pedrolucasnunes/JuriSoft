@@ -47,15 +47,13 @@ function formatTime(seconds: number): string {
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
 }
 
-// Cor do cronômetro conforme tempo restante
 function getTimerStyle(seconds: number): string {
-  if (seconds <= 10 * 60) return "text-destructive animate-pulse"  // < 10min — vermelho pulsando
-  if (seconds <= 30 * 60) return "text-orange-400"                  // < 30min — laranja
-  if (seconds <= 60 * 60) return "text-yellow-400"                  // < 1h — amarelo
-  return "text-foreground"                                           // normal
+  if (seconds <= 10 * 60) return "text-destructive animate-pulse"
+  if (seconds <= 30 * 60) return "text-orange-400"
+  if (seconds <= 60 * 60) return "text-yellow-400"
+  return "text-foreground"
 }
 
-// Marcos de aviso (em segundos)
 const AVISOS = [
   { tempo: 60 * 60, msg: "⏰ 1 hora restante no simulado!" },
   { tempo: 30 * 60, msg: "⚠️ 30 minutos restantes!" },
@@ -73,13 +71,12 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [flagged, setFlagged] = useState<Set<string>>(new Set())
-  const [timeRemaining, setTimeRemaining] = useState(5 * 60 * 60) // 5 horas
+  const [timeRemaining, setTimeRemaining] = useState(5 * 60 * 60)
   const [showFinishDialog, setShowFinishDialog] = useState(false)
   const [showTimeUpDialog, setShowTimeUpDialog] = useState(false)
   const [finalizando, setFinalizando] = useState(false)
   const [resultado, setResultado] = useState<Resultado | null>(null)
 
-  // Controla quais avisos já foram disparados
   const avisosDisparados = useRef<Set<number>>(new Set())
 
   useEffect(() => {
@@ -109,7 +106,6 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
       setTimeRemaining((prev) => {
         const next = prev - 1
 
-        // Dispara avisos nos marcos — sem fechar o simulado
         AVISOS.forEach(({ tempo, msg }) => {
           if (next === tempo && !avisosDisparados.current.has(tempo)) {
             avisosDisparados.current.add(tempo)
@@ -117,7 +113,6 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
           }
         })
 
-        // Tempo esgotado — avisa mas NÃO finaliza automaticamente
         if (next <= 0) {
           clearInterval(timer)
           setShowTimeUpDialog(true)
@@ -134,25 +129,26 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
   const questao = questoes[currentQuestion]
   const totalQuestions = questoes.length
   const answeredCount = Object.keys(answers).length
+  const flaggedList = questoes.filter((q) => flagged.has(q.id))
 
   const handleAnswer = async (valor: string) => {
     if (!userId || !questao) return
+
+    // Salva localmente
     setAnswers((prev) => ({ ...prev, [questao.id]: valor }))
 
-    const res = await fetch("/api/simulados/resposta", {
+    // Registra no backend — sem feedback de certo/errado no simulado
+    fetch("/api/simulados/resposta", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, questionId: questao.id, simuladoId, resposta: valor }),
     })
 
-    const data = await res.json()
-
-    if (res.ok) {
-      if (data.acertou) {
-        toast.success("Resposta correta! ✓")
-      } else {
-        toast.error(`Incorreto — gabarito: ${data.resposta_correta}`)
-      }
+    // Avança para próxima questão automaticamente (se não for a última)
+    if (currentQuestion < totalQuestions - 1) {
+      setTimeout(() => {
+        setCurrentQuestion((p) => p + 1)
+      }, 300)
     }
   }
 
@@ -160,7 +156,13 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
     if (!questao) return
     setFlagged((prev) => {
       const s = new Set(prev)
-      s.has(questao.id) ? s.delete(questao.id) : s.add(questao.id)
+      if (s.has(questao.id)) {
+        s.delete(questao.id)
+        toast.info("Questão removida da lista de revisão")
+      } else {
+        s.add(questao.id)
+        toast.info("Questão adicionada à lista de revisão")
+      }
       return s
     })
   }
@@ -189,7 +191,7 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
     setResultado(data)
   }
 
-  // ── Tela de resultado ────────────────────────────────────────────
+  // ── Tela de resultado ────────────────────────────────────────
   if (resultado) {
     return (
       <div className="space-y-6 pb-10">
@@ -198,22 +200,17 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
           <p className="text-muted-foreground">Confira seu resultado abaixo</p>
         </div>
         <div className="grid grid-cols-2 gap-4 max-w-lg mx-auto sm:grid-cols-4">
-          <div className="rounded-lg border border-border p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{resultado.acertos}</p>
-            <p className="text-xs text-muted-foreground">Acertos</p>
-          </div>
-          <div className="rounded-lg border border-border p-4 text-center">
-            <p className="text-2xl font-bold text-destructive">{resultado.erros}</p>
-            <p className="text-xs text-muted-foreground">Erros</p>
-          </div>
-          <div className="rounded-lg border border-border p-4 text-center">
-            <p className="text-2xl font-bold text-primary">{resultado.percentual}%</p>
-            <p className="text-xs text-muted-foreground">Aproveitamento</p>
-          </div>
-          <div className="rounded-lg border border-border p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{resultado.total}</p>
-            <p className="text-xs text-muted-foreground">Respondidas</p>
-          </div>
+          {[
+            { label: "Acertos", value: resultado.acertos, className: "text-foreground" },
+            { label: "Erros", value: resultado.erros, className: "text-destructive" },
+            { label: "Aproveitamento", value: `${resultado.percentual}%`, className: "text-primary" },
+            { label: "Respondidas", value: resultado.total, className: "text-foreground" },
+          ].map((item) => (
+            <div key={item.label} className="rounded-lg border border-border p-4 text-center">
+              <p className={`text-2xl font-bold ${item.className}`}>{item.value}</p>
+              <p className="text-xs text-muted-foreground">{item.label}</p>
+            </div>
+          ))}
         </div>
         <div className={`max-w-lg mx-auto rounded-lg border p-4 text-center text-sm font-medium ${resultado.percentual >= 60 ? "border-primary/30 bg-primary/5 text-primary" : "border-destructive/30 bg-destructive/5 text-destructive"}`}>
           {resultado.percentual >= 60 ? "✓ Aprovado — você atingiu a nota mínima da OAB (60%)" : "✗ Reprovado — a nota mínima da OAB é 60%"}
@@ -281,13 +278,10 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
           <p className="text-xs text-muted-foreground sm:text-sm">Questão {currentQuestion + 1} de {totalQuestions}</p>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
-          {/* Cronômetro com cor dinâmica */}
           <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border transition-colors ${
-            timeRemaining <= 10 * 60
-              ? "bg-destructive/10 border-destructive/30"
-              : timeRemaining <= 30 * 60
-              ? "bg-orange-500/10 border-orange-500/30"
-              : "bg-secondary border-transparent"
+            timeRemaining <= 10 * 60 ? "bg-destructive/10 border-destructive/30"
+            : timeRemaining <= 30 * 60 ? "bg-orange-500/10 border-orange-500/30"
+            : "bg-secondary border-transparent"
           }`}>
             <Clock className={`h-3 w-3 sm:h-4 sm:w-4 ${timerStyle}`} />
             <span className={`font-mono text-base font-semibold sm:text-lg ${timerStyle}`}>
@@ -309,22 +303,39 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
         <Progress value={totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0} className="h-2" />
       </div>
 
-      {/* ── Questão ── */}
+      {/* ── Questão + painel lateral ── */}
       <div className="flex-1 overflow-auto">
         <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+
+          {/* Questão */}
           <Card>
             <CardContent className="p-6">
               <div className="mb-4 flex items-center justify-between">
                 <Badge variant="secondary">{questao.subject_name}</Badge>
-                <Button variant={flagged.has(questao.id) ? "default" : "ghost"} size="sm" onClick={toggleFlag}>
-                  <Flag className="h-4 w-4" />
+                <Button
+                  variant={flagged.has(questao.id) ? "default" : "ghost"}
+                  size="sm"
+                  onClick={toggleFlag}
+                >
+                  <Flag className="h-4 w-4 mr-1" />
                   {flagged.has(questao.id) ? "Marcada" : "Marcar para revisão"}
                 </Button>
               </div>
               <p className="mb-6 text-foreground leading-relaxed">{questao.enunciado}</p>
-              <RadioGroup value={answers[questao.id] || ""} onValueChange={handleAnswer} className="space-y-3">
+              <RadioGroup
+                value={answers[questao.id] || ""}
+                onValueChange={handleAnswer}
+                className="space-y-3"
+              >
                 {alternativas.map((alt) => (
-                  <div key={alt.letra} className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${answers[questao.id] === alt.letra ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
+                  <div
+                    key={alt.letra}
+                    className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
+                      answers[questao.id] === alt.letra
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                  >
                     <RadioGroupItem value={alt.letra} id={`alt-${alt.letra}`} className="mt-0.5" />
                     <Label htmlFor={`alt-${alt.letra}`} className="flex-1 cursor-pointer text-foreground">
                       <span className="font-medium">{alt.letra})</span> {alt.texto}
@@ -343,30 +354,78 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
             </CardContent>
           </Card>
 
-          {/* ── Navegação lateral ── */}
-          <Card className="hidden lg:block">
-            <CardContent className="p-4">
-              <h3 className="mb-4 font-medium text-foreground">Navegação</h3>
-              <div className="grid grid-cols-5 gap-2">
-                {questoes.map((q, index) => (
-                  <button key={q.id} onClick={() => setCurrentQuestion(index)}
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-medium transition-colors ${
-                      currentQuestion === index ? "bg-primary text-primary-foreground"
-                      : answers[q.id] ? "bg-primary/20 text-primary"
-                      : flagged.has(q.id) ? "bg-warning/20 text-warning"
-                      : "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                    }`}>
-                    {index + 1}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-6 space-y-2 text-sm">
-                <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-primary/20" /><span className="text-muted-foreground">Respondida</span></div>
-                <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-warning/20" /><span className="text-muted-foreground">Marcada para revisão</span></div>
-                <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-secondary" /><span className="text-muted-foreground">Não respondida</span></div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* ── Painel lateral ── */}
+          <div className="hidden lg:flex flex-col gap-4">
+
+            {/* Navegação */}
+            <Card>
+              <CardContent className="p-4">
+                <h3 className="mb-4 font-medium text-foreground">Navegação</h3>
+                <div className="grid grid-cols-5 gap-2">
+                  {questoes.map((q, index) => (
+                    <button
+                      key={q.id}
+                      onClick={() => setCurrentQuestion(index)}
+                      className={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-medium transition-colors ${
+                        currentQuestion === index ? "bg-primary text-primary-foreground"
+                        : answers[q.id] ? "bg-primary/20 text-primary"
+                        : flagged.has(q.id) ? "bg-yellow-500/20 text-yellow-500"
+                        : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                      }`}
+                    >
+                      {index + 1}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4 space-y-2 text-xs">
+                  <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-primary/20" /><span className="text-muted-foreground">Respondida</span></div>
+                  <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-yellow-500/20" /><span className="text-muted-foreground">Marcada para revisão</span></div>
+                  <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-secondary" /><span className="text-muted-foreground">Não respondida</span></div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Lista de revisão */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium text-foreground flex items-center gap-2">
+                    <Flag className="h-4 w-4 text-yellow-500" />
+                    Lista de Revisão
+                  </h3>
+                  <Badge variant="secondary">{flaggedList.length}</Badge>
+                </div>
+
+                {flaggedList.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhuma questão marcada ainda. Use o botão{" "}
+                    <span className="font-medium text-foreground">"Marcar para revisão"</span>{" "}
+                    nas questões que quiser revisar antes de finalizar.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-[240px] overflow-y-auto pr-1">
+                    {flaggedList.map((q) => {
+                      const index = questoes.findIndex((x) => x.id === q.id)
+                      return (
+                        <button
+                          key={q.id}
+                          onClick={() => setCurrentQuestion(index)}
+                          className="w-full text-left rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3 hover:bg-yellow-500/10 transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-xs font-medium text-yellow-500">Q{index + 1}</span>
+                            <Badge variant="secondary" className="text-xs">{q.subject_name}</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground line-clamp-2">{q.enunciado}</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+          </div>
         </div>
       </div>
 
@@ -375,25 +434,37 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Finalizar simulado?</DialogTitle>
-            <DialogDescription>
-              Você respondeu {answeredCount} de {totalQuestions} questões.
-              {answeredCount < totalQuestions && (
-                <span className="block mt-2 text-orange-400">
-                  Atenção: {totalQuestions - answeredCount} questões sem resposta.
-                </span>
-              )}
+            <DialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>Você respondeu <strong className="text-foreground">{answeredCount}</strong> de <strong className="text-foreground">{totalQuestions}</strong> questões.</p>
+                {answeredCount < totalQuestions && (
+                  <p className="text-orange-400">
+                    ⚠️ {totalQuestions - answeredCount} questões sem resposta.
+                  </p>
+                )}
+                {flaggedList.length > 0 && (
+                  <p className="text-yellow-500">
+                    🚩 {flaggedList.length} questão(ões) marcada(s) para revisão ainda não revisada(s).
+                  </p>
+                )}
+              </div>
             </DialogDescription>
           </DialogHeader>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => setShowFinishDialog(false)} className="flex-1">Continuar</Button>
+          <div className="flex gap-3 mt-2">
+            <Button variant="outline" onClick={() => setShowFinishDialog(false)} className="flex-1">
+              Continuar
+            </Button>
             <Button onClick={finalizarSimulado} disabled={finalizando} className="flex-1">
-              {finalizando ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Finalizando...</> : <><CheckCircle2 className="mr-2 h-4 w-4" /> Finalizar</>}
+              {finalizando
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Finalizando...</>
+                : <><CheckCircle2 className="mr-2 h-4 w-4" /> Finalizar</>
+              }
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog: Tempo esgotado (avisa, não força) ── */}
+      {/* ── Dialog: Tempo esgotado ── */}
       <Dialog open={showTimeUpDialog} onOpenChange={setShowTimeUpDialog}>
         <DialogContent>
           <DialogHeader>
@@ -401,20 +472,22 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
               <AlertTriangle className="h-5 w-5" />
               Tempo esgotado!
             </DialogTitle>
-            <DialogDescription>
-              O tempo de 5 horas do simulado chegou ao fim. Você respondeu{" "}
-              <strong>{answeredCount} de {totalQuestions}</strong> questões.
-              <span className="block mt-2">
-                Você ainda pode continuar respondendo ou finalizar agora para ver seu resultado.
-              </span>
+            <DialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>O tempo de 5 horas chegou ao fim. Você respondeu <strong className="text-foreground">{answeredCount}</strong> de <strong className="text-foreground">{totalQuestions}</strong> questões.</p>
+                <p>Você ainda pode continuar respondendo ou finalizar para ver seu resultado.</p>
+              </div>
             </DialogDescription>
           </DialogHeader>
-          <div className="flex gap-3">
+          <div className="flex gap-3 mt-2">
             <Button variant="outline" onClick={() => setShowTimeUpDialog(false)} className="flex-1">
               Continuar mesmo assim
             </Button>
             <Button onClick={finalizarSimulado} disabled={finalizando} className="flex-1">
-              {finalizando ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Finalizando...</> : <><CheckCircle2 className="mr-2 h-4 w-4" /> Ver resultado</>}
+              {finalizando
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Finalizando...</>
+                : <><CheckCircle2 className="mr-2 h-4 w-4" /> Ver resultado</>
+              }
             </Button>
           </div>
         </DialogContent>
