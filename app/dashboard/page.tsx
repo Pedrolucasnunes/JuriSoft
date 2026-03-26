@@ -7,15 +7,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
-import { TrendingUp, TrendingDown, Target, FileText, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { TrendingUp, TrendingDown, Target, FileText, CheckCircle2, AlertTriangle, ArrowRight, Flag, List } from "lucide-react"
 import Link from "next/link"
-import { Area, AreaChart, Bar, BarChart, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts"
+import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid } from "recharts"
 import { supabase } from "@/lib/supabase"
 
-const getBarColor = (taxa: number) => {
-  if (taxa >= 70) return "var(--chart-1)"
-  if (taxa >= 55) return "var(--chart-3)"
-  return "var(--chart-4)"
+// ── Helpers taxa de acerto ───────────────────────────────────────
+function getBarColor(taxa: number): string {
+  if (taxa < 40) return "bg-destructive"
+  if (taxa < 70) return "bg-yellow-500"
+  return "bg-primary"
+}
+
+function getTextColor(taxa: number): string {
+  if (taxa < 40) return "text-destructive"
+  if (taxa < 70) return "text-yellow-500"
+  return "text-primary"
 }
 
 const getRiskLevel = (taxa: number): "alto" | "médio" | "baixo" => {
@@ -27,12 +36,66 @@ const getRiskLevel = (taxa: number): "alto" | "médio" | "baixo" => {
 function getRiskBadge(risk: string) {
   switch (risk) {
     case "alto": return <Badge variant="destructive">Alto risco</Badge>
-    case "médio": return <Badge className="bg-warning text-warning-foreground">Médio risco</Badge>
-    case "baixo": return <Badge className="bg-success text-success-foreground">Baixo risco</Badge>
+    case "médio": return <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30">Médio risco</Badge>
+    case "baixo": return <Badge className="bg-primary/10 text-primary border-primary/20">Baixo risco</Badge>
     default: return null
   }
 }
 
+// ── Legenda de cores ─────────────────────────────────────────────
+function Legenda() {
+  return (
+    <div className="flex gap-3 pt-2 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-destructive inline-block" /> Abaixo de 40%</span>
+      <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-yellow-500 inline-block" /> 40–70%</span>
+      <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-primary inline-block" /> Acima de 70%</span>
+    </div>
+  )
+}
+
+// ── Linha de disciplina ──────────────────────────────────────────
+interface DisciplinaItem {
+  nome: string
+  taxa_acerto: number
+}
+
+function DisciplinaRow({ item, index }: { item: DisciplinaItem; index?: number }) {
+  const taxa = Number(item.taxa_acerto)
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="space-y-1.5 cursor-default">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {index !== undefined && (
+                  <span className="text-xs text-muted-foreground w-4 shrink-0">{index + 1}.</span>
+                )}
+                <span className="text-sm text-foreground truncate max-w-[180px]">{item.nome}</span>
+              </div>
+              <span className={`text-sm font-semibold shrink-0 ${getTextColor(taxa)}`}>
+                {taxa.toFixed(0)}%
+              </span>
+            </div>
+
+            {/* bg-muted/50 no fundo — sem competir com a cor do progresso */}
+            <div className="h-2 w-full rounded-full bg-muted/50 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${getBarColor(taxa)}`}
+                style={{ width: `${Math.min(taxa, 100)}%` }}
+              />
+            </div>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <p className="font-medium">{item.nome}</p>
+          <p className="text-xs text-muted-foreground">{taxa.toFixed(1)}% de acerto</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+// ── Interfaces ───────────────────────────────────────────────────
 interface DashboardData {
   resumo: { totalRespondidas: number; totalAcertos: number; taxaGeralAcerto: number }
   ultimoSimulado: { id: string; acertos: number; erros: number; percentual: number; numero_questoes: number; titulo: string; created_at: string } | null
@@ -41,6 +104,7 @@ interface DashboardData {
   evolucao: { date: string; nota: number }[]
 }
 
+// ── Page ─────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -50,12 +114,7 @@ export default function DashboardPage() {
     async function fetchDashboard() {
       try {
         const { data: { user } } = await supabase.auth.getUser()
-
-        if (!user) {
-          setError("Usuário não autenticado")
-          setLoading(false)
-          return
-        }
+        if (!user) { setError("Usuário não autenticado"); setLoading(false); return }
 
         const res = await fetch(`/api/dashboard?userId=${user.id}`)
         const json = await res.json()
@@ -76,12 +135,10 @@ export default function DashboardPage() {
         setLoading(false)
       }
     }
-
     fetchDashboard()
   }, [])
 
   if (loading) return <SkeletonDashboard />
-
   if (error) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -121,10 +178,12 @@ export default function DashboardPage() {
     },
   ]
 
-  const disciplineData = (data?.desempenhoPorMateria ?? []).map((d) => ({
-    name: d.nome.length > 12 ? d.nome.slice(0, 12) + "…" : d.nome,
-    acerto: Number(d.taxa_acerto),
-  }))
+  // Dados para o novo componente de disciplinas
+  const disciplinas = data?.desempenhoPorMateria ?? []
+  const sortedAsc = [...disciplinas].sort((a, b) => Number(a.taxa_acerto) - Number(b.taxa_acerto))
+  const sortedDesc = [...disciplinas].sort((a, b) => Number(b.taxa_acerto) - Number(a.taxa_acerto))
+  const emRisco = sortedAsc.slice(0, 5)
+  const melhores = sortedDesc.slice(0, 5)
 
   const riskDisciplines = (data?.materiasRisco ?? []).map((m) => ({
     name: m.nome,
@@ -135,6 +194,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* ── Header ── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
@@ -147,6 +207,7 @@ export default function DashboardPage() {
         </Button>
       </div>
 
+      {/* ── Stats cards ── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {statsCards.map((card) => (
           <Card key={card.title}>
@@ -170,7 +231,10 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* ── Gráficos ── */}
       <div className="grid gap-6 lg:grid-cols-2">
+
+        {/* Evolução do Desempenho */}
         <Card>
           <CardHeader>
             <CardTitle>Evolução do Desempenho</CardTitle>
@@ -184,7 +248,7 @@ export default function DashboardPage() {
             ) : (
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data.evolucao}>
+                  <AreaChart data={data!.evolucao}>
                     <defs>
                       <linearGradient id="colorNota" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3} />
@@ -194,7 +258,7 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
                     <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" domain={[0, 100]} />
-                    <Tooltip
+                    <RechartsTooltip
                       contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
                       labelStyle={{ color: "hsl(var(--foreground))" }}
                       formatter={(value: number) => [`${value}%`, "Aproveitamento"]}
@@ -207,37 +271,78 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Taxa de Acerto por Disciplina — novo */}
         <Card>
           <CardHeader>
             <CardTitle>Taxa de Acerto por Disciplina</CardTitle>
             <CardDescription>Seu desempenho em cada área do conhecimento</CardDescription>
           </CardHeader>
           <CardContent>
-            {disciplineData.length === 0 ? (
+            {disciplinas.length === 0 ? (
               <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
                 Responda questões para ver seu desempenho por disciplina
               </div>
             ) : (
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={disciplineData} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={false} />
-                    <XAxis type="number" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" domain={[0, 100]} />
-                    <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" width={100} />
-                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} labelStyle={{ color: "hsl(var(--foreground))" }} />
-                    <Bar dataKey="acerto" radius={[0, 4, 4, 0]}>
-                      {disciplineData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={getBarColor(entry.acerto)} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <Tabs defaultValue="risco">
+                <TabsList className="w-full mb-4">
+                  <TabsTrigger value="risco" className="flex-1 gap-1.5">
+                    <TrendingDown className="h-3.5 w-3.5" />
+                    Em risco
+                    <Badge variant="secondary" className="ml-1 text-xs px-1.5">{emRisco.length}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="melhores" className="flex-1 gap-1.5">
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    Melhores
+                    <Badge variant="secondary" className="ml-1 text-xs px-1.5">{melhores.length}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="todas" className="flex-1 gap-1.5">
+                    <List className="h-3.5 w-3.5" />
+                    Todas
+                    <Badge variant="secondary" className="ml-1 text-xs px-1.5">{disciplinas.length}</Badge>
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Em risco */}
+                <TabsContent value="risco" className="space-y-4 mt-0">
+                  <p className="text-xs text-muted-foreground">As 5 disciplinas com menor aproveitamento — foque aqui primeiro.</p>
+                  <div className="space-y-4">
+                    {emRisco.map((item, i) => (
+                      <DisciplinaRow key={item.subject_id} item={item} index={i} />
+                    ))}
+                  </div>
+                  <Legenda />
+                </TabsContent>
+
+                {/* Melhores */}
+                <TabsContent value="melhores" className="space-y-4 mt-0">
+                  <p className="text-xs text-muted-foreground">As 5 disciplinas com melhor aproveitamento.</p>
+                  <div className="space-y-4">
+                    {melhores.map((item, i) => (
+                      <DisciplinaRow key={item.subject_id} item={item} index={i} />
+                    ))}
+                  </div>
+                  <Legenda />
+                </TabsContent>
+
+                {/* Todas */}
+                <TabsContent value="todas" className="mt-0">
+                  <p className="text-xs text-muted-foreground mb-4">Todas as disciplinas do pior para o melhor aproveitamento.</p>
+                  <div className="space-y-4 max-h-[280px] overflow-y-auto pr-1">
+                    {sortedAsc.map((item, i) => (
+                      <DisciplinaRow key={item.subject_id} item={item} index={i} />
+                    ))}
+                  </div>
+                  <div className="border-t border-border mt-3 pt-3">
+                    <Legenda />
+                  </div>
+                </TabsContent>
+              </Tabs>
             )}
           </CardContent>
         </Card>
       </div>
 
+      {/* ── Índice de Risco ── */}
       <Card>
         <CardHeader>
           <CardTitle>Índice de Risco de Reprovação</CardTitle>
@@ -250,13 +355,11 @@ export default function DashboardPage() {
             <div className="space-y-4">
               {riskDisciplines.map((discipline) => (
                 <div key={discipline.name} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
-                  <div className="flex items-center gap-4">
-                    <div className="flex flex-col gap-1">
-                      <span className="font-medium text-foreground">{discipline.name}</span>
-                      <div className="flex items-center gap-2">
-                        {getRiskBadge(discipline.risk)}
-                        <span className="text-xs text-muted-foreground">{discipline.percentage}% de acerto</span>
-                      </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-medium text-foreground">{discipline.name}</span>
+                    <div className="flex items-center gap-2">
+                      {getRiskBadge(discipline.risk)}
+                      <span className="text-xs text-muted-foreground">{discipline.percentage}% de acerto</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">

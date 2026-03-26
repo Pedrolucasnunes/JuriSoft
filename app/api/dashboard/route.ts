@@ -66,16 +66,30 @@ export async function GET(req: NextRequest) {
         taxa: m.taxa,
     }))
 
-    // 5. Desempenho por matéria (sem join)
-    const desempenhoPorMateria = (resumo ?? [])
+    // 5. Desempenho por matéria — agrupa por subject_id para evitar duplicatas
+    const agrupado = new Map<string, { subject_id: string; nome: string; total: number; acertos: number }>()
+
+    for (const r of resumo ?? []) {
+        const existing = agrupado.get(r.subject_id)
+        if (existing) {
+            existing.total += r.total ?? 0
+            existing.acertos += r.acertos ?? 0
+        } else {
+            agrupado.set(r.subject_id, {
+                subject_id: r.subject_id,
+                nome: subjectMap[r.subject_id] ?? "Matéria desconhecida",
+                total: r.total ?? 0,
+                acertos: r.acertos ?? 0,
+            })
+        }
+    }
+
+    const desempenhoPorMateria = Array.from(agrupado.values())
         .map((r) => ({
-            subject_id: r.subject_id,
-            nome: subjectMap[r.subject_id] ?? "Matéria desconhecida",
-            total: r.total,
-            acertos: r.acertos,
-            taxa_acerto: r.taxa_acerto,
+            ...r,
+            taxa_acerto: r.total > 0 ? parseFloat(((r.acertos / r.total) * 100).toFixed(2)) : 0,
         }))
-        .sort((a, b) => Number(a.taxa_acerto) - Number(b.taxa_acerto))
+        .sort((a, b) => a.taxa_acerto - b.taxa_acerto)
 
     // 6. Evolução do desempenho — histórico real de simulados
     const { data: historicoSimulados, error: historicoError } = await supabase
@@ -103,6 +117,6 @@ export async function GET(req: NextRequest) {
         ultimoSimulado: ultimoSimulado ?? null,
         materiasRisco,
         desempenhoPorMateria,
-         evolucao,
+        evolucao,
     }, { status: 200 })
 }
