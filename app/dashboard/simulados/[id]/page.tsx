@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, use } from "react"
+import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
-import { Clock, ChevronLeft, ChevronRight, Flag, CheckCircle2, Loader2 } from "lucide-react"
+import { Clock, ChevronLeft, ChevronRight, Flag, CheckCircle2, Loader2, AlertTriangle } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 
@@ -47,6 +47,22 @@ function formatTime(seconds: number): string {
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
 }
 
+// Cor do cronômetro conforme tempo restante
+function getTimerStyle(seconds: number): string {
+  if (seconds <= 10 * 60) return "text-destructive animate-pulse"  // < 10min — vermelho pulsando
+  if (seconds <= 30 * 60) return "text-orange-400"                  // < 30min — laranja
+  if (seconds <= 60 * 60) return "text-yellow-400"                  // < 1h — amarelo
+  return "text-foreground"                                           // normal
+}
+
+// Marcos de aviso (em segundos)
+const AVISOS = [
+  { tempo: 60 * 60, msg: "⏰ 1 hora restante no simulado!" },
+  { tempo: 30 * 60, msg: "⚠️ 30 minutos restantes!" },
+  { tempo: 10 * 60, msg: "🚨 Apenas 10 minutos restantes!" },
+  { tempo:  5 * 60, msg: "🔴 5 minutos restantes — conclua suas respostas!" },
+]
+
 export default function SimuladoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: simuladoId } = use(params)
   const router = useRouter()
@@ -57,10 +73,14 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [flagged, setFlagged] = useState<Set<string>>(new Set())
-  const [timeRemaining, setTimeRemaining] = useState(5 * 60 * 60)
+  const [timeRemaining, setTimeRemaining] = useState(5 * 60 * 60) // 5 horas
   const [showFinishDialog, setShowFinishDialog] = useState(false)
+  const [showTimeUpDialog, setShowTimeUpDialog] = useState(false)
   const [finalizando, setFinalizando] = useState(false)
   const [resultado, setResultado] = useState<Resultado | null>(null)
+
+  // Controla quais avisos já foram disparados
+  const avisosDisparados = useRef<Set<number>>(new Set())
 
   useEffect(() => {
     async function init() {
@@ -84,12 +104,30 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
 
   useEffect(() => {
     if (resultado) return
+
     const timer = setInterval(() => {
       setTimeRemaining((prev) => {
-        if (prev <= 0) { clearInterval(timer); setShowFinishDialog(true); return 0 }
-        return prev - 1
+        const next = prev - 1
+
+        // Dispara avisos nos marcos — sem fechar o simulado
+        AVISOS.forEach(({ tempo, msg }) => {
+          if (next === tempo && !avisosDisparados.current.has(tempo)) {
+            avisosDisparados.current.add(tempo)
+            toast.warning(msg, { duration: 6000 })
+          }
+        })
+
+        // Tempo esgotado — avisa mas NÃO finaliza automaticamente
+        if (next <= 0) {
+          clearInterval(timer)
+          setShowTimeUpDialog(true)
+          return 0
+        }
+
+        return next
       })
     }, 1000)
+
     return () => clearInterval(timer)
   }, [resultado])
 
@@ -99,11 +137,8 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
 
   const handleAnswer = async (valor: string) => {
     if (!userId || !questao) return
-
-    // Salva localmente imediatamente
     setAnswers((prev) => ({ ...prev, [questao.id]: valor }))
 
-    // Registra no backend
     const res = await fetch("/api/simulados/resposta", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -143,6 +178,7 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
     const data = await res.json()
     setFinalizando(false)
     setShowFinishDialog(false)
+    setShowTimeUpDialog(false)
 
     if (!res.ok) {
       toast.error(data.error ?? "Erro ao finalizar simulado")
@@ -153,6 +189,7 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
     setResultado(data)
   }
 
+  // ── Tela de resultado ────────────────────────────────────────────
   if (resultado) {
     return (
       <div className="space-y-6 pb-10">
@@ -232,22 +269,38 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
     { letra: "D", texto: questao.alternativa_d },
   ]
 
+  const timerStyle = getTimerStyle(timeRemaining)
+
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col">
+
+      {/* ── Header ── */}
       <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-base font-semibold text-foreground sm:text-lg">Simulado OAB</h1>
           <p className="text-xs text-muted-foreground sm:text-sm">Questão {currentQuestion + 1} de {totalQuestions}</p>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
-          <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-1.5 sm:px-4 sm:py-2">
-            <Clock className="h-3 w-3 text-muted-foreground sm:h-4 sm:w-4" />
-            <span className="font-mono text-base font-semibold text-foreground sm:text-lg">{formatTime(timeRemaining)}</span>
+          {/* Cronômetro com cor dinâmica */}
+          <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border transition-colors ${
+            timeRemaining <= 10 * 60
+              ? "bg-destructive/10 border-destructive/30"
+              : timeRemaining <= 30 * 60
+              ? "bg-orange-500/10 border-orange-500/30"
+              : "bg-secondary border-transparent"
+          }`}>
+            <Clock className={`h-3 w-3 sm:h-4 sm:w-4 ${timerStyle}`} />
+            <span className={`font-mono text-base font-semibold sm:text-lg ${timerStyle}`}>
+              {formatTime(timeRemaining)}
+            </span>
           </div>
-          <Button variant="destructive" size="sm" onClick={() => setShowFinishDialog(true)}>Finalizar</Button>
+          <Button variant="destructive" size="sm" onClick={() => setShowFinishDialog(true)}>
+            Finalizar
+          </Button>
         </div>
       </div>
 
+      {/* ── Progress bar ── */}
       <div className="py-4">
         <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
           <span>{answeredCount} de {totalQuestions} respondidas</span>
@@ -256,6 +309,7 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
         <Progress value={totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0} className="h-2" />
       </div>
 
+      {/* ── Questão ── */}
       <div className="flex-1 overflow-auto">
         <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
           <Card>
@@ -289,13 +343,19 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
             </CardContent>
           </Card>
 
+          {/* ── Navegação lateral ── */}
           <Card className="hidden lg:block">
             <CardContent className="p-4">
               <h3 className="mb-4 font-medium text-foreground">Navegação</h3>
               <div className="grid grid-cols-5 gap-2">
                 {questoes.map((q, index) => (
                   <button key={q.id} onClick={() => setCurrentQuestion(index)}
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-medium transition-colors ${currentQuestion === index ? "bg-primary text-primary-foreground" : answers[q.id] ? "bg-primary/20 text-primary" : flagged.has(q.id) ? "bg-warning/20 text-warning" : "bg-secondary text-muted-foreground hover:bg-secondary/80"}`}>
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-medium transition-colors ${
+                      currentQuestion === index ? "bg-primary text-primary-foreground"
+                      : answers[q.id] ? "bg-primary/20 text-primary"
+                      : flagged.has(q.id) ? "bg-warning/20 text-warning"
+                      : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                    }`}>
                     {index + 1}
                   </button>
                 ))}
@@ -310,19 +370,51 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
         </div>
       </div>
 
+      {/* ── Dialog: Finalizar voluntário ── */}
       <Dialog open={showFinishDialog} onOpenChange={setShowFinishDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Finalizar simulado?</DialogTitle>
             <DialogDescription>
               Você respondeu {answeredCount} de {totalQuestions} questões.
-              {answeredCount < totalQuestions && <span className="block mt-2 text-warning">Atenção: {totalQuestions - answeredCount} questões não respondidas.</span>}
+              {answeredCount < totalQuestions && (
+                <span className="block mt-2 text-orange-400">
+                  Atenção: {totalQuestions - answeredCount} questões sem resposta.
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => setShowFinishDialog(false)} className="flex-1">Continuar</Button>
             <Button onClick={finalizarSimulado} disabled={finalizando} className="flex-1">
               {finalizando ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Finalizando...</> : <><CheckCircle2 className="mr-2 h-4 w-4" /> Finalizar</>}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog: Tempo esgotado (avisa, não força) ── */}
+      <Dialog open={showTimeUpDialog} onOpenChange={setShowTimeUpDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-400">
+              <AlertTriangle className="h-5 w-5" />
+              Tempo esgotado!
+            </DialogTitle>
+            <DialogDescription>
+              O tempo de 5 horas do simulado chegou ao fim. Você respondeu{" "}
+              <strong>{answeredCount} de {totalQuestions}</strong> questões.
+              <span className="block mt-2">
+                Você ainda pode continuar respondendo ou finalizar agora para ver seu resultado.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setShowTimeUpDialog(false)} className="flex-1">
+              Continuar mesmo assim
+            </Button>
+            <Button onClick={finalizarSimulado} disabled={finalizando} className="flex-1">
+              {finalizando ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Finalizando...</> : <><CheckCircle2 className="mr-2 h-4 w-4" /> Ver resultado</>}
             </Button>
           </div>
         </DialogContent>
