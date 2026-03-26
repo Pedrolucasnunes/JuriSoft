@@ -77,6 +77,23 @@ export async function GET(req: NextRequest) {
         }))
         .sort((a, b) => Number(a.taxa_acerto) - Number(b.taxa_acerto))
 
+    // 6. Evolução do desempenho — histórico real de simulados
+    const { data: historicoSimulados, error: historicoError } = await supabase
+        .from("simulados")
+        .select("created_at, percentual")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: true })
+        .limit(20)
+
+    if (historicoError) {
+        console.error("Erro histórico:", historicoError.message)
+    }
+
+    const evolucao = (historicoSimulados ?? []).map((s) => ({
+        date: new Date(s.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
+        nota: parseFloat(Number(s.percentual).toFixed(1)),
+    }))
+
     return NextResponse.json({
         resumo: {
             totalRespondidas,
@@ -86,5 +103,6 @@ export async function GET(req: NextRequest) {
         ultimoSimulado: ultimoSimulado ?? null,
         materiasRisco,
         desempenhoPorMateria,
+         evolucao,
     }, { status: 200 })
 }

@@ -12,11 +12,6 @@ import Link from "next/link"
 import { Area, AreaChart, Bar, BarChart, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts"
 import { supabase } from "@/lib/supabase"
 
-const evolutionData = [
-  { date: "Jan", nota: 45 }, { date: "Fev", nota: 52 }, { date: "Mar", nota: 48 },
-  { date: "Abr", nota: 58 }, { date: "Mai", nota: 62 }, { date: "Jun", nota: 68 },
-]
-
 const getBarColor = (taxa: number) => {
   if (taxa >= 70) return "var(--chart-1)"
   if (taxa >= 55) return "var(--chart-3)"
@@ -43,6 +38,7 @@ interface DashboardData {
   ultimoSimulado: { id: string; acertos: number; erros: number; percentual: number; numero_questoes: number; titulo: string; created_at: string } | null
   materiasRisco: { subject_id: string; nome: string; taxa: number }[]
   desempenhoPorMateria: { subject_id: string; nome: string; total: number; acertos: number; taxa_acerto: number }[]
+  evolucao: { date: string; nota: number }[]
 }
 
 export default function DashboardPage() {
@@ -181,23 +177,33 @@ export default function DashboardPage() {
             <CardDescription>Sua nota nos simulados ao longo do tempo</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={evolutionData}>
-                  <defs>
-                    <linearGradient id="colorNota" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="date" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
-                  <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" domain={[0, 100]} />
-                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} labelStyle={{ color: "hsl(var(--foreground))" }} />
-                  <Area type="monotone" dataKey="nota" stroke="var(--chart-1)" strokeWidth={2} fillOpacity={1} fill="url(#colorNota)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            {(data?.evolucao?.length ?? 0) === 0 ? (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
+                Conclua simulados para ver sua evolução
+              </div>
+            ) : (
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={data.evolucao}>
+                    <defs>
+                      <linearGradient id="colorNota" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
+                    <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" domain={[0, 100]} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
+                      labelStyle={{ color: "hsl(var(--foreground))" }}
+                      formatter={(value: number) => [`${value}%`, "Aproveitamento"]}
+                    />
+                    <Area type="monotone" dataKey="nota" stroke="var(--chart-1)" strokeWidth={2} fillOpacity={1} fill="url(#colorNota)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
 
