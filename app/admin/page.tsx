@@ -1,88 +1,88 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Users, FileQuestion, FileText, TrendingUp, UserPlus, Activity } from "lucide-react"
+import { Users, FileQuestion, FileText, TrendingUp, Loader2 } from "lucide-react"
 import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
+  Area, AreaChart, Bar, BarChart,
+  ResponsiveContainer, XAxis, YAxis,
+  Tooltip, CartesianGrid,
 } from "recharts"
+import { toast } from "sonner"
 
-const statsCards = [
-  {
-    title: "Total de Usuários",
-    value: "12.847",
-    change: "+234",
-    changeLabel: "este mês",
-    icon: Users,
-    trend: "up",
-  },
-  {
-    title: "Questões Cadastradas",
-    value: "15.423",
-    change: "+127",
-    changeLabel: "esta semana",
-    icon: FileQuestion,
-    trend: "up",
-  },
-  {
-    title: "Simulados Ativos",
-    value: "48",
-    change: "+3",
-    changeLabel: "novos",
-    icon: FileText,
-    trend: "up",
-  },
-  {
-    title: "Taxa de Aprovação",
-    value: "68%",
-    change: "+5%",
-    changeLabel: "vs. mês passado",
-    icon: TrendingUp,
-    trend: "up",
-  },
-]
-
-const userGrowthData = [
-  { month: "Jan", usuarios: 8500 },
-  { month: "Fev", usuarios: 9200 },
-  { month: "Mar", usuarios: 9800 },
-  { month: "Abr", usuarios: 10500 },
-  { month: "Mai", usuarios: 11400 },
-  { month: "Jun", usuarios: 12847 },
-]
-
-const questoesPorDisciplina = [
-  { name: "Ética", questoes: 1250 },
-  { name: "Constitucional", questoes: 1820 },
-  { name: "Civil", questoes: 2100 },
-  { name: "Penal", questoes: 1650 },
-  { name: "Proc. Civil", questoes: 1780 },
-  { name: "Proc. Penal", questoes: 1420 },
-  { name: "Trabalho", questoes: 980 },
-  { name: "Administrativo", questoes: 1340 },
-  { name: "Tributário", questoes: 820 },
-  { name: "Empresarial", questoes: 750 },
-  { name: "D. Humanos", questoes: 680 },
-  { name: "Estatuto", questoes: 833 },
-]
-
-const recentActivity = [
-  { type: "user", message: "Novo usuário cadastrado: Maria Silva", time: "Há 5 minutos" },
-  { type: "question", message: "10 novas questões adicionadas em Direito Civil", time: "Há 15 minutos" },
-  { type: "simulado", message: "Simulado OAB XXXVIII ativado", time: "Há 1 hora" },
-  { type: "user", message: "Novo usuário cadastrado: Pedro Santos", time: "Há 2 horas" },
-  { type: "question", message: "Questão #12847 atualizada", time: "Há 3 horas" },
-]
+interface AdminStats {
+  totais: {
+    usuarios: number
+    questoes: number
+    simulados: number
+    mediaAproveitamento: number
+  }
+  questoesPorDisciplina: { name: string; questoes: number }[]
+  simuladosPorDia: { date: string; total: number }[]
+  usuariosRecentes: { id: string; role: string }[]
+}
 
 export default function AdminDashboardPage() {
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const res = await fetch("/api/admin/stats")
+        const data = await res.json()
+        if (!res.ok) {
+          toast.error("Erro ao carregar métricas")
+          return
+        }
+        setStats(data)
+      } catch {
+        toast.error("Erro inesperado ao carregar dashboard")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchStats()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!stats) return null
+
+  const statsCards = [
+    {
+      title: "Total de Usuários",
+      value: stats.totais.usuarios.toLocaleString("pt-BR"),
+      description: "Cadastrados na plataforma",
+      icon: Users,
+    },
+    {
+      title: "Questões Cadastradas",
+      value: stats.totais.questoes.toLocaleString("pt-BR"),
+      description: "No banco de questões",
+      icon: FileQuestion,
+    },
+    {
+      title: "Simulados Realizados",
+      value: stats.totais.simulados.toLocaleString("pt-BR"),
+      description: "Total acumulado",
+      icon: FileText,
+    },
+    {
+      title: "Média de Aproveitamento",
+      value: `${stats.totais.mediaAproveitamento}%`,
+      description: "Média geral dos simulados",
+      icon: TrendingUp,
+    },
+  ]
+
   return (
     <div className="space-y-6">
       <div>
@@ -90,7 +90,7 @@ export default function AdminDashboardPage() {
         <p className="text-muted-foreground">Visão geral da plataforma JuriSoft</p>
       </div>
 
-      {/* Cards de estatísticas */}
+      {/* ── Stats cards ── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {statsCards.map((card) => (
           <Card key={card.title}>
@@ -101,55 +101,41 @@ export default function AdminDashboardPage() {
               <card.icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-foreground">{card.value}</span>
-                <span className="flex items-center text-xs font-medium text-primary">
-                  {card.change}
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">{card.changeLabel}</p>
+              <span className="text-2xl font-bold text-foreground">{card.value}</span>
+              <p className="mt-1 text-xs text-muted-foreground">{card.description}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Gráficos */}
+      {/* ── Gráficos ── */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Crescimento de usuários */}
+
+        {/* Simulados por dia */}
         <Card>
           <CardHeader>
-            <CardTitle>Crescimento de Usuários</CardTitle>
-            <CardDescription>Evolução do número de usuários cadastrados</CardDescription>
+            <CardTitle>Simulados por Dia</CardTitle>
+            <CardDescription>Últimos 7 dias de atividade</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={userGrowthData}>
+                <AreaChart data={stats.simuladosPorDia}>
                   <defs>
-                    <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="colorSim" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
                       <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
-                  <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
+                  <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" allowDecimals={false} />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
+                    contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
                     labelStyle={{ color: "hsl(var(--foreground))" }}
+                    formatter={(value: number) => [value, "Simulados"]}
                   />
-                  <Area
-                    type="monotone"
-                    dataKey="usuarios"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#colorUsers)"
-                  />
+                  <Area type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} fillOpacity={1} fill="url(#colorSim)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -160,65 +146,74 @@ export default function AdminDashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Questões por Disciplina</CardTitle>
-            <CardDescription>Distribuição do banco de questões</CardDescription>
+            <CardDescription>Distribuição real do banco de questões</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={questoesPorDisciplina} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={false} />
-                  <XAxis type="number" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
-                  <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" width={80} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
-                  />
-                  <Bar dataKey="questoes" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {stats.questoesPorDisciplina.length === 0 ? (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
+                Nenhuma questão cadastrada ainda
+              </div>
+            ) : (
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stats.questoesPorDisciplina.slice(0, 10)} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={false} />
+                    <XAxis type="number" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      className="text-xs fill-muted-foreground"
+                      width={90}
+                      tickFormatter={(v: string) => v.length > 12 ? v.slice(0, 12) + "…" : v}
+                    />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
+                      labelStyle={{ color: "hsl(var(--foreground))" }}
+                      formatter={(value: number) => [value, "Questões"]}
+                    />
+                    <Bar dataKey="questoes" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Atividade recente */}
+      {/* ── Usuários recentes ── */}
       <Card>
         <CardHeader>
-          <CardTitle>Atividade Recente</CardTitle>
-          <CardDescription>Últimas ações na plataforma</CardDescription>
+          <CardTitle>Usuários Recentes</CardTitle>
+          <CardDescription>Últimos 5 usuários cadastrados na plataforma</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {recentActivity.map((activity, index) => (
-              <div key={index} className="flex items-center gap-4">
-                <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                    activity.type === "user"
-                      ? "bg-primary/10"
-                      : activity.type === "question"
-                      ? "bg-chart-2/10"
-                      : "bg-chart-3/10"
-                  }`}
-                >
-                  {activity.type === "user" ? (
-                    <UserPlus className="h-5 w-5 text-primary" />
-                  ) : activity.type === "question" ? (
-                    <FileQuestion className="h-5 w-5 text-chart-2" />
-                  ) : (
-                    <Activity className="h-5 w-5 text-chart-3" />
-                  )}
+          {stats.usuariosRecentes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum usuário encontrado.</p>
+          ) : (
+            <div className="space-y-3">
+              {stats.usuariosRecentes.map((u) => (
+                <div key={u.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
+                      <Users className="h-4 w-4 text-primary" />
+                    </div>
+                    <span className="text-sm font-mono text-muted-foreground truncate max-w-[200px]">
+                      {u.id}
+                    </span>
+                  </div>
+                  <Badge variant={
+                    u.role === "admin" ? "default" :
+                    u.role === "blocked" ? "destructive" :
+                    "secondary"
+                  }>
+                    {u.role}
+                  </Badge>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm text-foreground">{activity.message}</p>
-                  <p className="text-xs text-muted-foreground">{activity.time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

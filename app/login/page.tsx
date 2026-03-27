@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Scale, ArrowLeft, Eye, EyeOff } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { createBrowserClient } from "@supabase/ssr"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -21,11 +21,16 @@ export default function LoginPage() {
     setIsLoading(true)
     setError(null)
 
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
     const formData = new FormData(e.currentTarget)
     const email = formData.get("email") as string
     const password = formData.get("password") as string
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -36,7 +41,19 @@ export default function LoginPage() {
       return
     }
 
-    // Redireciona para a rota original ou dashboard
+    // Verifica role do usuário no banco
+    const { data: userData } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", authData.user.id)
+      .single()
+
+    // Admin vai para /admin, usuário normal segue o redirect ou /dashboard
+    if (userData?.role === "admin") {
+      router.push("/admin")
+      return
+    }
+
     const params = new URLSearchParams(window.location.search)
     const redirect = params.get("redirect") ?? "/dashboard"
     router.push(redirect)
@@ -117,7 +134,6 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Mensagem de erro */}
               {error && (
                 <p className="text-sm text-destructive">{error}</p>
               )}

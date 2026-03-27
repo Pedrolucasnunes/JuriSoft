@@ -1,3 +1,5 @@
+"use client"
+
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { Separator } from "@/components/ui/separator"

@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextRequest, NextResponse } from "next/server"
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {  // ← era "middleware", agora é "proxy"
   const res = NextResponse.next()
 
   const supabase = createServerClient(
@@ -26,21 +26,17 @@ export async function middleware(req: NextRequest) {
 
   const { pathname } = req.nextUrl
 
-  // Rotas públicas — não precisam de login
   const rotasPublicas = ["/", "/login", "/cadastro", "/recuperar-senha"]
   const isRotaPublica = rotasPublicas.some(rota => pathname === rota || pathname.startsWith(rota + "/"))
 
-  // Rotas protegidas — precisam de login
   const isRotaProtegida = pathname.startsWith("/dashboard") || pathname.startsWith("/admin")
 
-  // Não logado tentando acessar rota protegida
   if (!session && isRotaProtegida) {
     const loginUrl = new URL("/login", req.url)
     loginUrl.searchParams.set("redirect", pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  // Já logado tentando acessar login ou cadastro
   if (session && (pathname === "/login" || pathname === "/cadastro")) {
     return NextResponse.redirect(new URL("/dashboard", req.url))
   }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { createBrowserClient } from "@supabase/ssr"
 import { Loader2 } from "lucide-react"
 
 export function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -12,17 +12,48 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     async function check() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push("/login"); return }
+      try {
+        const supabase = createBrowserClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
 
-      const res = await fetch(`/api/admin/check?userId=${user.id}`)
-      const { isAdmin } = await res.json()
+        const { data: { user }, error } = await supabase.auth.getUser()
+        
+        console.log("=== ADMIN GUARD DEBUG ===")
+        console.log("user:", user)
+        console.log("user.id:", user?.id)
+        console.log("user.email:", user?.email)
+        console.log("auth error:", error)
 
-      if (!isAdmin) { router.push("/dashboard"); return }
+        if (!user) {
+          console.log("→ Redirecionando para /login (sem user)")
+          router.push("/login")
+          return
+        }
 
-      setAllowed(true)
-      setChecking(false)
+        const res = await fetch(`/api/admin/check?userId=${user.id}`)
+        const json = await res.json()
+        
+        console.log("admin check response:", json)
+        console.log("isAdmin:", json.isAdmin)
+
+        if (!json.isAdmin) {
+          console.log("→ Redirecionando para /dashboard (não é admin)")
+          router.push("/dashboard")
+          return
+        }
+
+        console.log("→ Acesso liberado!")
+        setAllowed(true)
+      } catch (err) {
+        console.log("→ Erro no AdminGuard:", err)
+        router.push("/dashboard")
+      } finally {
+        setChecking(false)
+      }
     }
+
     check()
   }, [])
 
@@ -33,6 +64,8 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
       </div>
     )
   }
+
+  if (!allowed) return null
 
   return <>{children}</>
 }
