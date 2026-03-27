@@ -1,11 +1,11 @@
-import { supabase } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase-admin"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { role } = await req.json()
 
-  const { error } = await supabase
+  const { error } = await supabaseAdmin
     .from("users")
     .update({ role })
     .eq("id", id)

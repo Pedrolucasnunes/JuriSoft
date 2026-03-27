@@ -1,53 +1,80 @@
-import { supabase } from "@/lib/supabase"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(req: NextRequest) {
-  let body: any
+  const cookieStore = await cookies()
 
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => cookieStore.getAll(),
+        setAll: (cookiesToSet) => {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  // ✅ Obtém usuário autenticado — ignora userId do body
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    console.error("[treino] Não autenticado:", authError?.message)
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+  }
+
+  const userId = user.id
+
+  let body: any
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 })
   }
 
-  const { userId, quantidade } = body
+  const { quantidade } = body
+  const totalQuestoes = [10, 20, 30].includes(Number(quantidade)) ? Number(quantidade) : 10
+  const qtdRisco = Math.round(totalQuestoes * 0.7)
+  const qtdGeral = totalQuestoes - qtdRisco
 
-  if (!userId) {
-    return NextResponse.json({ error: "userId é obrigatório" }, { status: 400 })
+  console.log(`[treino] userId=${userId} total=${totalQuestoes} risco=${qtdRisco} geral=${qtdGeral}`)
+
+  // 1. Questões já acertadas pelo usuário
+  const { data: attemptsData } = await supabase
+    .from("simulado_attempts")
+    .select("id")
+    .eq("user_id", userId)
+
+  const attemptIds = (attemptsData ?? []).map((a) => a.id)
+
+  let idsJaAcertou: string[] = []
+
+  if (attemptIds.length > 0) {
+    const { data: jaAcertou } = await supabase
+      .from("simulado_respostas")
+      .select("question_id")
+      .eq("acertou", true)
+      .in("attempt_id", attemptIds)
+
+    idsJaAcertou = (jaAcertou ?? []).map((r) => r.question_id)
   }
 
-  const totalQuestoes = [10, 20, 30].includes(Number(quantidade)) ? Number(quantidade) : 10
-  const qtdRisco = Math.round(totalQuestoes * 0.7)   // 70%
-  const qtdGeral = totalQuestoes - qtdRisco           // 30%
-
-  // 1. Busca questões que o usuário JÁ ACERTOU (para evitar repetir)
-  const { data: jaAcertou } = await supabase
-    .from("simulado_respostas")
-    .select("question_id")
-    .eq("acertou", true)
-    .in(
-      "attempt_id",
-      (
-        await supabase
-          .from("simulado_attempts")
-          .select("id")
-          .eq("user_id", userId)
-      ).data?.map((a) => a.id) ?? []
-    )
-
-  const idsJaAcertou = (jaAcertou ?? []).map((r) => r.question_id)
-
-  // 2. Busca matérias em risco do usuário (ordenadas pela menor taxa)
+  // 2. Matérias em risco
   const { data: materiasRisco } = await supabase
     .from("materias_risco")
     .select("subject_id, taxa")
     .eq("user_id", userId)
     .order("taxa", { ascending: true })
-    .limit(3) // top 3 matérias mais fracas
+    .limit(3)
 
   const subjectIdsRisco = (materiasRisco ?? []).map((m) => m.subject_id)
 
-  // 3. Busca questões das matérias em risco (70%)
+  // 3. Questões das matérias em risco (70%)
   let questoesRisco: any[] = []
 
   if (subjectIdsRisco.length > 0) {
@@ -55,9 +82,8 @@ export async function POST(req: NextRequest) {
       .from("questions")
       .select("id, enunciado, alternativa_a, alternativa_b, alternativa_c, alternativa_d, subject_id, topic_id")
       .in("subject_id", subjectIdsRisco)
-      .limit(qtdRisco * 5) // pool maior para embaralhar
+      .limit(qtdRisco * 5)
 
-    // Exclui as que já acertou
     if (idsJaAcertou.length > 0) {
       query = query.not("id", "in", `(${idsJaAcertou.join(",")})`)
     }
@@ -65,61 +91,53 @@ export async function POST(req: NextRequest) {
     const { data, error } = await query
 
     if (error) {
-      console.error("Erro questões risco:", error.message)
+      console.error("[treino] Erro questões risco:", error.message)
     }
 
-    questoesRisco = (data ?? [])
-      .sort(() => Math.random() - 0.5)
-      .slice(0, qtdRisco)
+    questoesRisco = (data ?? []).sort(() => Math.random() - 0.5).slice(0, qtdRisco)
   }
 
-  // 4. IDs já selecionados para não repetir no pool geral
-  const idsJaSelecionados = [
-    ...idsJaAcertou,
-    ...questoesRisco.map((q) => q.id),
-  ]
+  // 4. Questões gerais (30%)
+  const idsJaSelecionados = [...idsJaAcertou, ...questoesRisco.map((q) => q.id)]
 
-  // 5. Busca questões gerais aleatórias (30%)
-  let query = supabase
+  let queryGeral = supabase
     .from("questions")
     .select("id, enunciado, alternativa_a, alternativa_b, alternativa_c, alternativa_d, subject_id, topic_id")
     .limit(qtdGeral * 5)
 
   if (idsJaSelecionados.length > 0) {
-    query = query.not("id", "in", `(${idsJaSelecionados.join(",")})`)
+    queryGeral = queryGeral.not("id", "in", `(${idsJaSelecionados.join(",")})`)
   }
 
-  const { data: questoesGeral, error: geralError } = await query
+  const { data: questoesGeral, error: geralError } = await queryGeral
 
   if (geralError) {
-    console.error("Erro questões gerais:", geralError.message)
+    console.error("[treino] Erro questões gerais:", geralError.message)
   }
 
   const questoesGeralSelecionadas = (questoesGeral ?? [])
     .sort(() => Math.random() - 0.5)
     .slice(0, qtdGeral)
 
-  // 6. Monta lista final embaralhada
-  const questoesFinal = [
-    ...questoesRisco,
-    ...questoesGeralSelecionadas,
-  ].sort(() => Math.random() - 0.5)
+  // 5. Monta lista final
+  const questoesFinal = [...questoesRisco, ...questoesGeralSelecionadas]
+    .sort(() => Math.random() - 0.5)
 
-  // 7. Busca nomes das matérias para exibir no front
+  // 6. Busca nomes das matérias
   const subjectIdsFinal = [...new Set(questoesFinal.map((q) => q.subject_id))]
   const { data: subjects } = await supabase
     .from("subjects")
     .select("id, name")
-    .in("id", subjectIdsFinal)
+    .in("id", subjectIdsFinal.length > 0 ? subjectIdsFinal : ["null"])
 
-  const subjectMap = Object.fromEntries(
-    (subjects ?? []).map((s) => [s.id, s.name])
-  )
+  const subjectMap = Object.fromEntries((subjects ?? []).map((s) => [s.id, s.name]))
 
   const questoesComMateria = questoesFinal.map((q) => ({
     ...q,
     subject_name: subjectMap[q.subject_id] ?? "Desconhecida",
   }))
+
+  console.log(`[treino] ${questoesFinal.length} questões montadas — risco=${questoesRisco.length} geral=${questoesGeralSelecionadas.length}`)
 
   return NextResponse.json({
     distribuicao: {

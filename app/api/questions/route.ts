@@ -1,54 +1,66 @@
-import { supabase } from "@/lib/supabase"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function GET(req: NextRequest) {
+  const cookieStore = await cookies()
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => cookieStore.getAll(),
+        setAll: (cookiesToSet) => {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  // ✅ Verifica autenticação
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    console.error("[questions] Não autenticado:", authError?.message)
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+  }
+
   const { searchParams } = new URL(req.url)
-
-  const userId     = searchParams.get("userId")
-  const subjectId  = searchParams.get("subjectId")
-  const topicId    = searchParams.get("topicId")
+  const subjectId   = searchParams.get("subjectId")
+  const topicId     = searchParams.get("topicId")
   const dificuldade = searchParams.get("dificuldade")
-  const banca      = searchParams.get("banca")
-  const busca      = searchParams.get("busca")
-  const page       = Math.max(1, Number(searchParams.get("page") ?? "1"))
-  const limit      = 10
-  const offset     = (page - 1) * limit
+  const banca       = searchParams.get("banca")
+  const busca       = searchParams.get("busca")
+  const page        = Math.max(1, Number(searchParams.get("page") ?? "1"))
+  const limit       = 10
+  const offset      = (page - 1) * limit
 
-  // Monta query base
   let query = supabase
     .from("questions")
     .select(`
-      id,
-      enunciado,
-      alternativa_a,
-      alternativa_b,
-      alternativa_c,
-      alternativa_d,
-      dificuldade,
-      banca,
-      ano,
-      subject_id,
-      topic_id
+      id, enunciado,
+      alternativa_a, alternativa_b, alternativa_c, alternativa_d,
+      dificuldade, banca, ano, subject_id, topic_id
     `, { count: "exact" })
 
-  // Filtros opcionais
   if (subjectId)   query = query.eq("subject_id", subjectId)
   if (topicId)     query = query.eq("topic_id", topicId)
   if (dificuldade) query = query.eq("dificuldade", dificuldade)
   if (banca)       query = query.eq("banca", banca)
   if (busca)       query = query.ilike("enunciado", `%${busca}%`)
 
-  // Paginação
   query = query.range(offset, offset + limit - 1)
 
   const { data: questions, error, count } = await query
 
   if (error) {
-    console.error("Erro ao buscar questões:", error.message)
+    console.error("[questions] Erro ao buscar questões:", error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Busca nomes de subjects e topics para exibir na UI
   const subjectIds = [...new Set((questions ?? []).map((q) => q.subject_id).filter(Boolean))]
   const topicIds   = [...new Set((questions ?? []).map((q) => q.topic_id).filter(Boolean))]
 

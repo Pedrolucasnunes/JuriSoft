@@ -1,19 +1,35 @@
-import { supabase } from "@/lib/supabase"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(req: NextRequest) {
-  let userId: string | undefined
+  const cookieStore = await cookies()
 
-  try {
-    const body = await req.json()
-    userId = body?.userId
-  } catch {
-    return NextResponse.json({ error: "Body inválido" }, { status: 400 })
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => cookieStore.getAll(),
+        setAll: (cookiesToSet) => {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  // ✅ Obtém usuário autenticado — não confia no frontend
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    console.error("[gerar] Usuário não autenticado:", authError?.message)
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
 
-  if (!userId) {
-    return NextResponse.json({ error: "userId é obrigatório" }, { status: 400 })
-  }
+  const userId = user.id
+  console.log(`[gerar] Iniciando simulado para userId=${userId}`)
 
   // 1. Busca pool de questões
   const { data: questions, error: qError } = await supabase
@@ -22,11 +38,12 @@ export async function POST(req: NextRequest) {
     .limit(500)
 
   if (qError) {
-    console.error("Erro ao buscar questões:", qError.message)
+    console.error("[gerar] Erro ao buscar questões:", qError.message)
     return NextResponse.json({ error: qError.message }, { status: 500 })
   }
 
   if (!questions || questions.length < 80) {
+    console.error(`[gerar] Questões insuficientes: ${questions?.length ?? 0}`)
     return NextResponse.json(
       { error: `Questões insuficientes: ${questions?.length ?? 0} encontradas` },
       { status: 500 }
@@ -48,11 +65,13 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (sError || !simulado) {
-    console.error("Erro ao criar simulado:", sError?.message)
+    console.error("[gerar] Erro ao criar simulado:", sError?.message)
     return NextResponse.json({ error: sError?.message }, { status: 500 })
   }
 
-  // 3. Cria os vínculos em simulado_attempts (1 por questão)
+  console.log(`[gerar] Simulado criado: simuladoId=${simulado.id}`)
+
+  // 3. Cria os vínculos em simulado_attempts
   const attempts = shuffled.map((q) => ({
     user_id: userId,
     simulado_id: simulado.id,
@@ -64,11 +83,12 @@ export async function POST(req: NextRequest) {
     .insert(attempts)
 
   if (aError) {
-    console.error("Erro ao criar attempts:", aError.message)
-    // Rollback do simulado
+    console.error("[gerar] Erro ao criar attempts:", aError.message)
     await supabase.from("simulados").delete().eq("id", simulado.id)
     return NextResponse.json({ error: aError.message }, { status: 500 })
   }
+
+  console.log(`[gerar] ${shuffled.length} attempts criados para simuladoId=${simulado.id}`)
 
   return NextResponse.json({ simuladoId: simulado.id }, { status: 201 })
 }

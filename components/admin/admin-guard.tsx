@@ -18,36 +18,24 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         )
 
-        const { data: { user }, error } = await supabase.auth.getUser()
-        
-        console.log("=== ADMIN GUARD DEBUG ===")
-        console.log("user:", user)
-        console.log("user.id:", user?.id)
-        console.log("user.email:", user?.email)
-        console.log("auth error:", error)
+        const { data: { user } } = await supabase.auth.getUser()
 
         if (!user) {
-          console.log("→ Redirecionando para /login (sem user)")
           router.push("/login")
           return
         }
 
+        // ✅ Passa userId — supabaseAdmin ignora RLS
         const res = await fetch(`/api/admin/check?userId=${user.id}`)
-        const json = await res.json()
-        
-        console.log("admin check response:", json)
-        console.log("isAdmin:", json.isAdmin)
+        const { isAdmin } = await res.json()
 
-        if (!json.isAdmin) {
-          console.log("→ Redirecionando para /dashboard (não é admin)")
+        if (!isAdmin) {
           router.push("/dashboard")
           return
         }
 
-        console.log("→ Acesso liberado!")
         setAllowed(true)
       } catch (err) {
-        console.log("→ Erro no AdminGuard:", err)
         router.push("/dashboard")
       } finally {
         setChecking(false)

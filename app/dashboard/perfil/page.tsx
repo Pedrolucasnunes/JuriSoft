@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { User, Mail, Lock, Trophy, BookOpen, Target, Loader2 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { createBrowserClient } from "@supabase/ssr"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 
@@ -26,22 +26,34 @@ export default function PerfilPage() {
 
   useEffect(() => {
     async function init() {
+      // ✅ createBrowserClient dentro do componente
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       setEmail(user.email ?? "")
-      setNome(user.user_metadata?.full_name ?? "")
-      setDataCadastro(new Date(user.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }))
+      setNome(user.user_metadata?.nome ?? user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? "")
+      setDataCadastro(new Date(user.created_at).toLocaleDateString("pt-BR", {
+        day: "2-digit", month: "short", year: "numeric"
+      }))
 
-      const res = await fetch(`/api/dashboard?userId=${user.id}`)
-      const data = await res.json()
+      // ✅ Sem userId na chamada — API obtém do Auth
+      const [dashRes, simuladosRes] = await Promise.all([
+        fetch("/api/dashboard"),
+        supabase.from("simulados").select("id", { count: "exact" }).eq("user_id", user.id).gt("acertos", 0),
+      ])
 
-      if (res.ok) {
-        const totalSimulados = await supabase.from("simulados").select("id", { count: "exact" }).eq("user_id", user.id).gt("acertos", 0)
+      const dashData = await dashRes.json()
+
+      if (dashRes.ok) {
         setStats({
-          simuladosFeitos: totalSimulados.count ?? 0,
-          questoesResolvidas: data.resumo?.totalRespondidas ?? 0,
-          taxaAcerto: data.resumo?.taxaGeralAcerto ?? 0,
+          simuladosFeitos: simuladosRes.count ?? 0,
+          questoesResolvidas: dashData.resumo?.totalRespondidas ?? 0,
+          taxaAcerto: dashData.resumo?.taxaGeralAcerto ?? 0,
         })
       }
 
@@ -55,9 +67,13 @@ export default function PerfilPage() {
 
   const handleSalvar = async () => {
     setSalvando(true)
-
     try {
-      const updates: any = { data: { full_name: nome } }
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+
+      const updates: any = { data: { nome, full_name: nome } }
 
       if (novaSenha) {
         if (novaSenha.length < 6) {
@@ -110,7 +126,9 @@ export default function PerfilPage() {
                 </div>
                 {isEditing ? (
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => { setIsEditing(false); setNovaSenha("") }} disabled={salvando}>Cancelar</Button>
+                    <Button variant="outline" onClick={() => { setIsEditing(false); setNovaSenha("") }} disabled={salvando}>
+                      Cancelar
+                    </Button>
                     <Button onClick={handleSalvar} disabled={salvando}>
                       {salvando ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...</> : "Salvar"}
                     </Button>
@@ -123,7 +141,9 @@ export default function PerfilPage() {
             <CardContent className="space-y-6">
               <div className="flex items-center gap-4">
                 <Avatar className="h-20 w-20">
-                  <AvatarFallback className="bg-primary text-primary-foreground text-2xl">{getIniciais(nome)}</AvatarFallback>
+                  <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
+                    {getIniciais(nome)}
+                  </AvatarFallback>
                 </Avatar>
               </div>
 
@@ -153,9 +173,19 @@ export default function PerfilPage() {
                   <Label htmlFor="nova-senha">Nova senha</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input id="nova-senha" type="password" placeholder="Digite a nova senha" value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} disabled={!isEditing} className="pl-10" />
+                    <Input
+                      id="nova-senha"
+                      type="password"
+                      placeholder="Digite a nova senha"
+                      value={novaSenha}
+                      onChange={(e) => setNovaSenha(e.target.value)}
+                      disabled={!isEditing}
+                      className="pl-10"
+                    />
                   </div>
-                  {isEditing && <p className="text-xs text-muted-foreground">Deixe em branco para manter a senha atual</p>}
+                  {isEditing && (
+                    <p className="text-xs text-muted-foreground">Deixe em branco para manter a senha atual</p>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -178,7 +208,7 @@ export default function PerfilPage() {
                 <Button variant="outline">Gerenciar</Button>
               </div>
               <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                {[["Ilimitado","Simulados"],["528+","Questões"],["24/7","Suporte"]].map(([v,l]) => (
+                {[["Ilimitado", "Simulados"], ["528+", "Questões"], ["24/7", "Suporte"]].map(([v, l]) => (
                   <div key={l} className="rounded-lg border border-border p-4 text-center">
                     <p className="text-2xl font-bold text-primary">{v}</p>
                     <p className="text-xs text-muted-foreground">{l}</p>
@@ -242,6 +272,10 @@ export default function PerfilPage() {
         description="Você será redirecionado para a página de login."
         confirmLabel="Sair"
         onConfirm={async () => {
+          const supabase = createBrowserClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+          )
           await supabase.auth.signOut()
           window.location.href = "/login"
         }}

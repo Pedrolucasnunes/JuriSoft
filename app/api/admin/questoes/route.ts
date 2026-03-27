@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase-admin"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function GET(req: NextRequest) {
@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const limit = 20
   const offset = (page - 1) * limit
 
-  let query = supabase
+  let query = supabaseAdmin
     .from("questions")
     .select(`
       id, enunciado, alternativa_a, alternativa_b, alternativa_c, alternativa_d,
@@ -23,9 +23,8 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Busca nomes
   const subjectIds = [...new Set((data ?? []).map(q => q.subject_id).filter(Boolean))]
-  const { data: subjects } = await supabase
+  const { data: subjects } = await supabaseAdmin
     .from("subjects").select("id, name")
     .in("id", subjectIds.length > 0 ? subjectIds : ["null"])
 
@@ -51,10 +50,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Campos obrigatórios faltando" }, { status: 400 })
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("questions")
-    .insert({ enunciado, alternativa_a, alternativa_b, alternativa_c, alternativa_d,
-      resposta_correta, dificuldade, banca, ano: Number(ano), subject_id, topic_id, explicacao })
+    .insert({
+      enunciado, alternativa_a, alternativa_b, alternativa_c, alternativa_d,
+      resposta_correta, dificuldade, banca, ano: Number(ano), subject_id, topic_id, explicacao
+    })
     .select("id").single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

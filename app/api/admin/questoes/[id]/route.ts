@@ -1,11 +1,11 @@
-import { supabase } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase-admin"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const body = await req.json()
 
-  const { error } = await supabase
+  const { error } = await supabaseAdmin
     .from("questions")
     .update(body)
     .eq("id", id)
@@ -17,7 +17,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  const { error } = await supabase
+  const { error } = await supabaseAdmin
     .from("questions")
     .delete()
     .eq("id", id)

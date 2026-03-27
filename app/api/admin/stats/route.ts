@@ -1,24 +1,20 @@
-import { supabase } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase-admin"
 import { NextResponse } from "next/server"
 
 export async function GET() {
-  // 1. Total de usuários
-  const { count: totalUsuarios } = await supabase
+  const { count: totalUsuarios } = await supabaseAdmin
     .from("users")
     .select("id", { count: "exact", head: true })
 
-  // 2. Total de questões
-  const { count: totalQuestoes } = await supabase
+  const { count: totalQuestoes } = await supabaseAdmin
     .from("questions")
     .select("id", { count: "exact", head: true })
 
-  // 3. Total de simulados realizados
-  const { count: totalSimulados } = await supabase
+  const { count: totalSimulados } = await supabaseAdmin
     .from("simulados")
     .select("id", { count: "exact", head: true })
 
-  // 4. Média geral de aproveitamento
-  const { data: mediaData } = await supabase
+  const { data: mediaData } = await supabaseAdmin
     .from("simulados")
     .select("percentual")
 
@@ -26,14 +22,13 @@ export async function GET() {
     ? parseFloat((mediaData.reduce((acc, s) => acc + Number(s.percentual), 0) / mediaData.length).toFixed(1))
     : 0
 
-  // 5. Questões por disciplina
-  const { data: subjects } = await supabase
+  const { data: subjects } = await supabaseAdmin
     .from("subjects")
     .select("id, name")
 
   const subjectMap = Object.fromEntries((subjects ?? []).map(s => [s.id, s.name]))
 
-  const { data: questoesPorSubject } = await supabase
+  const { data: questoesPorSubject } = await supabaseAdmin
     .from("questions")
     .select("subject_id")
 
@@ -50,18 +45,16 @@ export async function GET() {
     }))
     .sort((a, b) => b.questoes - a.questoes)
 
-  // 6. Simulados por dia (últimos 7 dias)
   const hoje = new Date()
   const seteDiasAtras = new Date(hoje)
   seteDiasAtras.setDate(hoje.getDate() - 6)
 
-  const { data: simuladosRecentes } = await supabase
+  const { data: simuladosRecentes } = await supabaseAdmin
     .from("simulados")
     .select("created_at")
     .gte("created_at", seteDiasAtras.toISOString())
     .order("created_at", { ascending: true })
 
-  // Agrupa por dia
   const contagemPorDia = new Map<string, number>()
   for (let i = 0; i < 7; i++) {
     const d = new Date(seteDiasAtras)
@@ -81,8 +74,7 @@ export async function GET() {
     total,
   }))
 
-  // 7. Usuários recentes (últimos 5)
-  const { data: usuariosRecentes } = await supabase
+  const { data: usuariosRecentes } = await supabaseAdmin
     .from("users")
     .select("id, role")
     .order("id", { ascending: false })

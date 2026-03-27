@@ -41,15 +41,11 @@ export default function LoginPage() {
       return
     }
 
-    // Verifica role do usuário no banco
-    const { data: userData } = await supabase
-      .from("users")
-      .select("role")
-      .eq("id", authData.user.id)
-      .single()
+    // ✅ Usa a API admin/check que usa supabaseAdmin — ignora RLS
+    const res = await fetch(`/api/admin/check?userId=${authData.user.id}`)
+    const { isAdmin } = await res.json()
 
-    // Admin vai para /admin, usuário normal segue o redirect ou /dashboard
-    if (userData?.role === "admin") {
+    if (isAdmin) {
       router.push("/admin")
       return
     }

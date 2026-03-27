@@ -1,7 +1,35 @@
-import { supabase } from "@/lib/supabase"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(req: NextRequest) {
+  const cookieStore = await cookies()
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => cookieStore.getAll(),
+        setAll: (cookiesToSet) => {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  // ✅ Obtém usuário autenticado
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    console.error("[resposta] Usuário não autenticado:", authError?.message)
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+  }
+
+  const userId = user.id
+
   let body: any
   try {
     body = await req.json()
@@ -9,11 +37,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 })
   }
 
-  const { userId, questionId, simuladoId, resposta } = body
+  // ✅ userId vem do Auth — ignora userId do body
+  const { questionId, simuladoId, resposta } = body
 
-  if (!userId || !questionId || !resposta) {
+  if (!questionId || !resposta) {
     return NextResponse.json(
-      { error: "userId, questionId e resposta são obrigatórios" },
+      { error: "questionId e resposta são obrigatórios" },
       { status: 400 }
     )
   }
@@ -40,37 +69,45 @@ export async function POST(req: NextRequest) {
 
   const acertou = respostaFormatada === question.resposta_correta.toUpperCase().trim()
 
-  // Se tem simuladoId — fluxo do simulado (salva em simulado_respostas)
   if (simuladoId) {
+    // ✅ Verifica que o attempt pertence ao usuário autenticado
     const { data: attempt, error: atError } = await supabase
       .from("simulado_attempts")
       .select("id")
       .eq("simulado_id", simuladoId)
       .eq("question_id", questionId)
+      .eq("user_id", userId) // ← garante ownership
       .single()
 
     if (atError || !attempt) {
+      console.error(`[resposta] Attempt não encontrado para userId=${userId} simuladoId=${simuladoId} questionId=${questionId}`)
       return NextResponse.json(
         { error: "Questão não pertence a este simulado" },
         { status: 404 }
       )
     }
 
+    // Upsert para evitar duplicatas
     const { error: rError } = await supabase
       .from("simulado_respostas")
-      .insert({
-        attempt_id: attempt.id,
-        question_id: questionId,
-        resposta_usuario: respostaFormatada,
-        acertou,
-      })
+      .upsert(
+        {
+          attempt_id: attempt.id,
+          question_id: questionId,
+          resposta_usuario: respostaFormatada,
+          acertou,
+        },
+        { onConflict: "attempt_id" }
+      )
 
     if (rError) {
-      console.error("Erro ao salvar resposta:", rError.message)
+      console.error("[resposta] Erro ao salvar resposta:", rError.message)
       return NextResponse.json({ error: rError.message }, { status: 500 })
     }
+
+    console.log(`[resposta] Resposta salva — userId=${userId} questionId=${questionId} acertou=${acertou}`)
   } else {
-    // Treino avulso ou banco de questões — salva em question_attempts
+    // Treino avulso — salva em question_attempts
     const { error: qaError } = await supabase
       .from("question_attempts")
       .insert({
@@ -81,9 +118,11 @@ export async function POST(req: NextRequest) {
       })
 
     if (qaError) {
-      console.error("Erro ao salvar treino:", qaError.message)
+      console.error("[resposta] Erro ao salvar treino:", qaError.message)
       return NextResponse.json({ error: qaError.message }, { status: 500 })
     }
+
+    console.log(`[resposta] Treino salvo — userId=${userId} questionId=${questionId} acertou=${acertou}`)
   }
 
   return NextResponse.json(

@@ -116,7 +116,7 @@ export default function DashboardPage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { setError("Usuário não autenticado"); setLoading(false); return }
 
-        const res = await fetch(`/api/dashboard?userId=${user.id}`)
+        const res = await fetch(`/api/dashboard`)
         const json = await res.json()
 
         if (!res.ok) {

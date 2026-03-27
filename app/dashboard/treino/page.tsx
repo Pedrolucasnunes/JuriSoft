@@ -13,7 +13,7 @@ import {
   Dumbbell, Target, Lightbulb, Play, TrendingUp,
   ChevronLeft, ChevronRight, CheckCircle2, XCircle, Loader2
 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { createBrowserClient } from "@supabase/ssr"
 
 const treinoOptions = [
   { value: "10", label: "10", description: "Treino rápido (15-20 min)" },
@@ -49,13 +49,11 @@ interface Progresso {
 }
 
 export default function TreinoPage() {
-  const [userId, setUserId] = useState<string>("")
   const [quantidadeQuestoes, setQuantidadeQuestoes] = useState("10")
   const [materiasRisco, setMateriasRisco] = useState<MateriasRisco[]>([])
   const [progresso, setProgresso] = useState<Progresso | null>(null)
   const [loadingDados, setLoadingDados] = useState(true)
 
-  // Estado do treino ativo
   const [treinoAtivo, setTreinoAtivo] = useState<TreinoAtivo | null>(null)
   const [iniciando, setIniciando] = useState(false)
   const [currentQuestion, setCurrentQuestion] = useState(0)
@@ -65,12 +63,16 @@ export default function TreinoPage() {
 
   useEffect(() => {
     async function init() {
+      // ✅ Verifica autenticação — mas não precisa do userId aqui
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      setUserId(user.id)
 
-      // Busca dados do dashboard para matérias em risco e progresso
-      const res = await fetch(`/api/dashboard?userId=${user.id}`)
+      // ✅ Sem userId na chamada — API obtém do Auth
+      const res = await fetch("/api/dashboard")
       const data = await res.json()
 
       if (res.ok) {
@@ -84,13 +86,13 @@ export default function TreinoPage() {
   }, [])
 
   const iniciarTreino = async () => {
-    if (!userId) return
     setIniciando(true)
 
+    // ✅ Sem userId no body — API obtém do Auth
     const res = await fetch("/api/treino", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, quantidade: Number(quantidadeQuestoes) }),
+      body: JSON.stringify({ quantidade: Number(quantidadeQuestoes) }),
     })
 
     const data = await res.json()
@@ -105,18 +107,18 @@ export default function TreinoPage() {
   }
 
   const handleVerificar = async () => {
-    if (!treinoAtivo || !userId) return
+    if (!treinoAtivo) return
     const questao = treinoAtivo.questoes[currentQuestion]
     const resposta = answers[questao.id]
     if (!resposta) return
 
     setVerificando(true)
 
+    // ✅ Sem userId no body — API obtém do Auth
     const res = await fetch("/api/simulados/resposta", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        userId,
         questionId: questao.id,
         simuladoId: null,
         resposta,
@@ -139,12 +141,11 @@ export default function TreinoPage() {
     setAnswers({})
     setRespostas({})
     setCurrentQuestion(0)
-    // Recarrega progresso
-    if (userId) {
-      fetch(`/api/dashboard?userId=${userId}`)
-        .then(r => r.json())
-        .then(d => { if (d.resumo) setProgresso(d.resumo) })
-    }
+
+    // ✅ Recarrega progresso sem userId
+    fetch("/api/dashboard")
+      .then(r => r.json())
+      .then(d => { if (d.resumo) setProgresso(d.resumo) })
   }
 
   // ─── MODO TREINO ATIVO ────────────────────────────────────────
@@ -165,7 +166,6 @@ export default function TreinoPage() {
 
     return (
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">Treino Estratégico</h1>
@@ -178,10 +178,8 @@ export default function TreinoPage() {
           </Button>
         </div>
 
-        {/* Progresso */}
         <Progress value={(respondidas / total) * 100} className="h-2" />
 
-        {/* Distribuição */}
         <div className="flex gap-3 text-xs text-muted-foreground">
           <span className="rounded-full bg-destructive/10 px-3 py-1 text-destructive">
             {treinoAtivo.distribuicao.risco} matérias em risco
@@ -191,7 +189,6 @@ export default function TreinoPage() {
           </span>
         </div>
 
-        {/* Questão */}
         <Card>
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center justify-between">
@@ -237,7 +234,6 @@ export default function TreinoPage() {
               ))}
             </RadioGroup>
 
-            {/* Feedback */}
             {jaRespondida && (
               <div className="rounded-lg border border-border bg-secondary/30 p-4">
                 <div className="flex items-center gap-2">
@@ -249,7 +245,6 @@ export default function TreinoPage() {
               </div>
             )}
 
-            {/* Navegação */}
             <div className="flex items-center justify-between pt-2">
               <Button
                 variant="outline"
@@ -294,8 +289,6 @@ export default function TreinoPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-
-          {/* Recomendação inteligente */}
           {pioresmaterias.length > 0 && (
             <Alert className="border-warning/50 bg-warning/5">
               <Lightbulb className="h-4 w-4 text-warning" />
@@ -313,7 +306,6 @@ export default function TreinoPage() {
             </Alert>
           )}
 
-          {/* Card iniciar treino */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -376,7 +368,6 @@ export default function TreinoPage() {
             </CardContent>
           </Card>
 
-          {/* Matérias para treinar */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -429,7 +420,6 @@ export default function TreinoPage() {
           </Card>
         </div>
 
-        {/* Coluna lateral */}
         <div className="space-y-6">
           <Card>
             <CardHeader>
