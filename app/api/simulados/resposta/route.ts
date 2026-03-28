@@ -90,15 +90,12 @@ export async function POST(req: NextRequest) {
     // Upsert para evitar duplicatas
     const { error: rError } = await supabase
       .from("simulado_respostas")
-      .upsert(
-        {
-          attempt_id: attempt.id,
-          question_id: questionId,
-          resposta_usuario: respostaFormatada,
-          acertou,
-        },
-        { onConflict: "attempt_id" }
-      )
+      .insert({
+        attempt_id: attempt.id,
+        question_id: questionId,
+        resposta_usuario: respostaFormatada,
+        acertou,
+      })
 
     if (rError) {
       console.error("[resposta] Erro ao salvar resposta:", rError.message)

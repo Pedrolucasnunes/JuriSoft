@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { createBrowserClient } from "@supabase/ssr"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -9,7 +10,7 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { FileText, Clock, Play, BarChart3, Trophy, Loader2 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { toast } from "sonner"
 
 interface SimuladoRealizado {
   id: string
@@ -27,13 +28,16 @@ export default function SimuladosPage() {
   const [loadingHistorico, setLoadingHistorico] = useState(true)
   const [simuladosRealizados, setSimuladosRealizados] = useState<SimuladoRealizado[]>([])
   const [selectedSimulado, setSelectedSimulado] = useState<SimuladoRealizado | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
     async function init() {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      setUserId(user.id)
 
       const { data } = await supabase
         .from("simulados")
@@ -48,26 +52,26 @@ export default function SimuladosPage() {
   }, [])
 
   const iniciarSimulado = async () => {
-    if (!userId) return
     setLoading(true)
 
     try {
+      // ✅ Sem userId no body — API obtém do Auth via cookies
       const res = await fetch("/api/simulados/gerar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({}),
       })
 
       const data = await res.json()
 
       if (!res.ok) {
-        alert(data.error ?? "Erro ao gerar simulado")
+        toast.error(data.error ?? "Erro ao gerar simulado")
         return
       }
 
       router.push(`/dashboard/simulados/${data.simuladoId}`)
     } catch {
-      alert("Erro inesperado ao gerar simulado")
+      toast.error("Erro inesperado ao gerar simulado")
     } finally {
       setLoading(false)
     }
@@ -93,7 +97,6 @@ export default function SimuladosPage() {
 
         <TabsContent value="disponiveis" className="mt-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Card único — simulado padrão OAB */}
             <Card className="transition-all hover:border-primary/50">
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -117,16 +120,11 @@ export default function SimuladosPage() {
                     5 horas
                   </div>
                 </div>
-                <Button
-                  className="mt-4 w-full"
-                  onClick={iniciarSimulado}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando...</>
-                  ) : (
-                    <><Play className="mr-2 h-4 w-4" /> Iniciar simulado</>
-                  )}
+                <Button className="mt-4 w-full" onClick={iniciarSimulado} disabled={loading}>
+                  {loading
+                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando...</>
+                    : <><Play className="mr-2 h-4 w-4" /> Iniciar simulado</>
+                  }
                 </Button>
               </CardContent>
             </Card>
@@ -181,7 +179,6 @@ export default function SimuladosPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog resultado */}
       <Dialog open={!!selectedSimulado} onOpenChange={() => setSelectedSimulado(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>

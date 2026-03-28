@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
+import { createBrowserClient } from "@supabase/ssr"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,7 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Clock, ChevronLeft, ChevronRight, Flag, CheckCircle2, Loader2, AlertTriangle } from "lucide-react"
-import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 
 interface Questao {
@@ -58,14 +58,13 @@ const AVISOS = [
   { tempo: 60 * 60, msg: "⏰ 1 hora restante no simulado!" },
   { tempo: 30 * 60, msg: "⚠️ 30 minutos restantes!" },
   { tempo: 10 * 60, msg: "🚨 Apenas 10 minutos restantes!" },
-  { tempo:  5 * 60, msg: "🔴 5 minutos restantes — conclua suas respostas!" },
+  { tempo: 5 * 60, msg: "🔴 5 minutos restantes — conclua suas respostas!" },
 ]
 
 export default function SimuladoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: simuladoId } = use(params)
   const router = useRouter()
 
-  const [userId, setUserId] = useState<string | null>(null)
   const [questoes, setQuestoes] = useState<Questao[]>([])
   const [loadingQuestoes, setLoadingQuestoes] = useState(true)
   const [currentQuestion, setCurrentQuestion] = useState(0)
@@ -81,9 +80,14 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
 
   useEffect(() => {
     async function init() {
+      // ✅ createBrowserClient dentro do componente
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push("/login"); return }
-      setUserId(user.id)
 
       const res = await fetch(`/api/simulados/${simuladoId}/questoes`)
       const data = await res.json()
@@ -132,23 +136,31 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
   const flaggedList = questoes.filter((q) => flagged.has(q.id))
 
   const handleAnswer = async (valor: string) => {
-    if (!userId || !questao) return
+    if (!questao) return
 
-    // Salva localmente
     setAnswers((prev) => ({ ...prev, [questao.id]: valor }))
 
-    // Registra no backend — sem feedback de certo/errado no simulado
-    fetch("/api/simulados/resposta", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, questionId: questao.id, simuladoId, resposta: valor }),
-    })
+    try {
+      const res = await fetch("/api/simulados/resposta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionId: questao.id, simuladoId, resposta: valor }),
+      })
 
-    // Avança para próxima questão automaticamente (se não for a última)
+      if (!res.ok) {
+        const data = await res.json()
+        console.error("[handleAnswer] Erro:", data.error)
+        toast.error("Erro ao salvar resposta")
+        return
+      }
+    } catch (err) {
+      console.error("[handleAnswer] Erro inesperado:", err)
+      toast.error("Erro ao salvar resposta")
+      return
+    }
+
     if (currentQuestion < totalQuestions - 1) {
-      setTimeout(() => {
-        setCurrentQuestion((p) => p + 1)
-      }, 300)
+      setTimeout(() => setCurrentQuestion((p) => p + 1), 300)
     }
   }
 
@@ -168,13 +180,13 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
   }
 
   const finalizarSimulado = async () => {
-    if (!userId) return
     setFinalizando(true)
 
+    // ✅ Sem userId no body
     const res = await fetch("/api/simulados/finalizar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ simuladoId, userId }),
+      body: JSON.stringify({ simuladoId }),
     })
 
     const data = await res.json()
@@ -270,19 +282,16 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
 
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col">
-
-      {/* ── Header ── */}
       <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-base font-semibold text-foreground sm:text-lg">Simulado OAB</h1>
           <p className="text-xs text-muted-foreground sm:text-sm">Questão {currentQuestion + 1} de {totalQuestions}</p>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
-          <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border transition-colors ${
-            timeRemaining <= 10 * 60 ? "bg-destructive/10 border-destructive/30"
+          <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border transition-colors ${timeRemaining <= 10 * 60 ? "bg-destructive/10 border-destructive/30"
             : timeRemaining <= 30 * 60 ? "bg-orange-500/10 border-orange-500/30"
-            : "bg-secondary border-transparent"
-          }`}>
+              : "bg-secondary border-transparent"
+            }`}>
             <Clock className={`h-3 w-3 sm:h-4 sm:w-4 ${timerStyle}`} />
             <span className={`font-mono text-base font-semibold sm:text-lg ${timerStyle}`}>
               {formatTime(timeRemaining)}
@@ -294,7 +303,6 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
         </div>
       </div>
 
-      {/* ── Progress bar ── */}
       <div className="py-4">
         <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
           <span>{answeredCount} de {totalQuestions} respondidas</span>
@@ -303,39 +311,22 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
         <Progress value={totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0} className="h-2" />
       </div>
 
-      {/* ── Questão + painel lateral ── */}
       <div className="flex-1 overflow-auto">
         <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-
-          {/* Questão */}
           <Card>
             <CardContent className="p-6">
               <div className="mb-4 flex items-center justify-between">
                 <Badge variant="secondary">{questao.subject_name}</Badge>
-                <Button
-                  variant={flagged.has(questao.id) ? "default" : "ghost"}
-                  size="sm"
-                  onClick={toggleFlag}
-                >
+                <Button variant={flagged.has(questao.id) ? "default" : "ghost"} size="sm" onClick={toggleFlag}>
                   <Flag className="h-4 w-4 mr-1" />
                   {flagged.has(questao.id) ? "Marcada" : "Marcar para revisão"}
                 </Button>
               </div>
               <p className="mb-6 text-foreground leading-relaxed">{questao.enunciado}</p>
-              <RadioGroup
-                value={answers[questao.id] || ""}
-                onValueChange={handleAnswer}
-                className="space-y-3"
-              >
+              <RadioGroup value={answers[questao.id] || ""} onValueChange={handleAnswer} className="space-y-3">
                 {alternativas.map((alt) => (
-                  <div
-                    key={alt.letra}
-                    className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
-                      answers[questao.id] === alt.letra
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50"
-                    }`}
-                  >
+                  <div key={alt.letra} className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${answers[questao.id] === alt.letra ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                    }`}>
                     <RadioGroupItem value={alt.letra} id={`alt-${alt.letra}`} className="mt-0.5" />
                     <Label htmlFor={`alt-${alt.letra}`} className="flex-1 cursor-pointer text-foreground">
                       <span className="font-medium">{alt.letra})</span> {alt.texto}
@@ -354,25 +345,18 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
             </CardContent>
           </Card>
 
-          {/* ── Painel lateral ── */}
           <div className="hidden lg:flex flex-col gap-4">
-
-            {/* Navegação */}
             <Card>
               <CardContent className="p-4">
                 <h3 className="mb-4 font-medium text-foreground">Navegação</h3>
                 <div className="grid grid-cols-5 gap-2">
                   {questoes.map((q, index) => (
-                    <button
-                      key={q.id}
-                      onClick={() => setCurrentQuestion(index)}
-                      className={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-medium transition-colors ${
-                        currentQuestion === index ? "bg-primary text-primary-foreground"
+                    <button key={q.id} onClick={() => setCurrentQuestion(index)}
+                      className={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-medium transition-colors ${currentQuestion === index ? "bg-primary text-primary-foreground"
                         : answers[q.id] ? "bg-primary/20 text-primary"
-                        : flagged.has(q.id) ? "bg-yellow-500/20 text-yellow-500"
-                        : "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                      }`}
-                    >
+                          : flagged.has(q.id) ? "bg-yellow-500/20 text-yellow-500"
+                            : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                        }`}>
                       {index + 1}
                     </button>
                   ))}
@@ -385,7 +369,6 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
               </CardContent>
             </Card>
 
-            {/* Lista de revisão */}
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -395,7 +378,6 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
                   </h3>
                   <Badge variant="secondary">{flaggedList.length}</Badge>
                 </div>
-
                 {flaggedList.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
                     Nenhuma questão marcada ainda. Use o botão{" "}
@@ -407,11 +389,8 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
                     {flaggedList.map((q) => {
                       const index = questoes.findIndex((x) => x.id === q.id)
                       return (
-                        <button
-                          key={q.id}
-                          onClick={() => setCurrentQuestion(index)}
-                          className="w-full text-left rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3 hover:bg-yellow-500/10 transition-colors"
-                        >
+                        <button key={q.id} onClick={() => setCurrentQuestion(index)}
+                          className="w-full text-left rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3 hover:bg-yellow-500/10 transition-colors">
                           <div className="flex items-center justify-between gap-2 mb-1">
                             <span className="text-xs font-medium text-yellow-500">Q{index + 1}</span>
                             <Badge variant="secondary" className="text-xs">{q.subject_name}</Badge>
@@ -424,12 +403,10 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
                 )}
               </CardContent>
             </Card>
-
           </div>
         </div>
       </div>
 
-      {/* ── Dialog: Finalizar voluntário ── */}
       <Dialog open={showFinishDialog} onOpenChange={setShowFinishDialog}>
         <DialogContent>
           <DialogHeader>
@@ -437,40 +414,25 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
             <DialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p>Você respondeu <strong className="text-foreground">{answeredCount}</strong> de <strong className="text-foreground">{totalQuestions}</strong> questões.</p>
-                {answeredCount < totalQuestions && (
-                  <p className="text-orange-400">
-                    ⚠️ {totalQuestions - answeredCount} questões sem resposta.
-                  </p>
-                )}
-                {flaggedList.length > 0 && (
-                  <p className="text-yellow-500">
-                    🚩 {flaggedList.length} questão(ões) marcada(s) para revisão ainda não revisada(s).
-                  </p>
-                )}
+                {answeredCount < totalQuestions && <p className="text-orange-400">⚠️ {totalQuestions - answeredCount} questões sem resposta.</p>}
+                {flaggedList.length > 0 && <p className="text-yellow-500">🚩 {flaggedList.length} questão(ões) marcada(s) para revisão ainda não revisada(s).</p>}
               </div>
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-3 mt-2">
-            <Button variant="outline" onClick={() => setShowFinishDialog(false)} className="flex-1">
-              Continuar
-            </Button>
+            <Button variant="outline" onClick={() => setShowFinishDialog(false)} className="flex-1">Continuar</Button>
             <Button onClick={finalizarSimulado} disabled={finalizando} className="flex-1">
-              {finalizando
-                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Finalizando...</>
-                : <><CheckCircle2 className="mr-2 h-4 w-4" /> Finalizar</>
-              }
+              {finalizando ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Finalizando...</> : <><CheckCircle2 className="mr-2 h-4 w-4" /> Finalizar</>}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog: Tempo esgotado ── */}
       <Dialog open={showTimeUpDialog} onOpenChange={setShowTimeUpDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-orange-400">
-              <AlertTriangle className="h-5 w-5" />
-              Tempo esgotado!
+              <AlertTriangle className="h-5 w-5" /> Tempo esgotado!
             </DialogTitle>
             <DialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
@@ -480,14 +442,9 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-3 mt-2">
-            <Button variant="outline" onClick={() => setShowTimeUpDialog(false)} className="flex-1">
-              Continuar mesmo assim
-            </Button>
+            <Button variant="outline" onClick={() => setShowTimeUpDialog(false)} className="flex-1">Continuar mesmo assim</Button>
             <Button onClick={finalizarSimulado} disabled={finalizando} className="flex-1">
-              {finalizando
-                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Finalizando...</>
-                : <><CheckCircle2 className="mr-2 h-4 w-4" /> Ver resultado</>
-              }
+              {finalizando ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Finalizando...</> : <><CheckCircle2 className="mr-2 h-4 w-4" /> Ver resultado</>}
             </Button>
           </div>
         </DialogContent>
