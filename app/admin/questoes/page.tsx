@@ -55,6 +55,7 @@ interface QuestaoCSV {
   subject_id: string
   topic_id: string
   explicacao: string
+  incidencia_prova: string
   _valida: boolean
   _erros: string[]
 }
