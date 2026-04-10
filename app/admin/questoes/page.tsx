@@ -237,8 +237,8 @@ export default function AdminQuestoesPage() {
   }
 
   const baixarTemplate = () => {
-    const headers = "enunciado;alternativa_a;alternativa_b;alternativa_c;alternativa_d;resposta_correta;dificuldade;banca;ano;subject_id;topic_id;explicacao"
-    const exemplo = "Qual é o princípio...;Alternativa A;Alternativa B;Alternativa C;Alternativa D;A;médio;FGV;2023;UUID_DA_DISCIPLINA;;Explicação opcional"
+    const headers = "enunciado;alternativa_a;alternativa_b;alternativa_c;alternativa_d;resposta_correta;dificuldade;banca;ano;subject_id;topic_id;incidencia_prova;explicacao"
+    const exemplo = "Qual é o princípio...;Alternativa A;Alternativa B;Alternativa C;Alternativa D;A;médio;FGV;2023;UUID_DA_DISCIPLINA;;1;Explicação opcional"
     const blob = new Blob([`${headers}\n${exemplo}`], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -540,11 +540,10 @@ export default function AdminQuestoesPage() {
                 {csvPreview.map((q, i) => (
                   <div
                     key={i}
-                    className={`rounded-lg border p-3 space-y-1 ${
-                      q._valida
+                    className={`rounded-lg border p-3 space-y-1 ${q._valida
                         ? "border-primary/20 bg-primary/5"
                         : "border-destructive/20 bg-destructive/5"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">

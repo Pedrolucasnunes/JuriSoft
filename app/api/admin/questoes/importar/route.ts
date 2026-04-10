@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       subject_id: q.subject_id,
       topic_id: q.topic_id ?? null,
       explicacao: q.explicacao ?? "",
+      incidencia_prova: q.incidencia_prova ? Number(q.incidencia_prova) : null,
     })))
 
   if (error) {
