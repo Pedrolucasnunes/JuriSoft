@@ -174,9 +174,6 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
       return
     }
 
-    if (currentQuestion < totalQuestions - 1) {
-      setTimeout(() => setCurrentQuestion((p) => p + 1), 300)
-    }
   }
 
   const toggleFlag = () => {
@@ -371,19 +368,26 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
                 <div className="grid grid-cols-5 gap-2">
                   {questoes.map((q, index) => (
                     <button key={q.id} onClick={() => setCurrentQuestion(index)}
-                      className={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-medium transition-colors ${currentQuestion === index ? "bg-primary text-primary-foreground"
-                        : answers[q.id] ? "bg-primary/20 text-primary"
-                          : flagged.has(q.id) ? "bg-yellow-500/20 text-yellow-500"
-                            : "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                        }`}>
+                      className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg text-sm font-semibold transition-all duration-150 active:scale-95 ${
+                        currentQuestion === index
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : answers[q.id] && flagged.has(q.id)
+                          ? "bg-primary/25 text-primary ring-1 ring-yellow-500/50 hover:bg-primary/35"
+                          : answers[q.id]
+                          ? "bg-primary/20 text-primary hover:bg-primary/30"
+                          : flagged.has(q.id)
+                          ? "bg-yellow-500/20 text-yellow-400 ring-1 ring-yellow-500/30 hover:bg-yellow-500/30"
+                          : "bg-muted text-foreground hover:bg-primary/15 hover:text-primary"
+                      }`}>
                       {index + 1}
                     </button>
                   ))}
                 </div>
                 <div className="mt-4 space-y-2 text-xs">
+                  <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-primary" /><span className="text-muted-foreground">Atual</span></div>
                   <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-primary/20" /><span className="text-muted-foreground">Respondida</span></div>
-                  <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-yellow-500/20" /><span className="text-muted-foreground">Marcada para revisão</span></div>
-                  <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-secondary" /><span className="text-muted-foreground">Não respondida</span></div>
+                  <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-yellow-500/20 ring-1 ring-yellow-500/30" /><span className="text-muted-foreground">Marcada para revisão</span></div>
+                  <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-muted" /><span className="text-muted-foreground">Não respondida</span></div>
                 </div>
               </CardContent>
             </Card>
@@ -434,7 +438,9 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p>Você respondeu <strong className="text-foreground">{answeredCount}</strong> de <strong className="text-foreground">{totalQuestions}</strong> questões.</p>
                 {answeredCount < totalQuestions && <p className="text-orange-400">⚠️ {totalQuestions - answeredCount} questões sem resposta.</p>}
-                {flaggedList.length > 0 && <p className="text-yellow-500">🚩 {flaggedList.length} questão(ões) marcada(s) para revisão ainda não revisada(s).</p>}
+                {flaggedList.filter(q => !answers[q.id]).length > 0 && (
+                  <p className="text-yellow-500">🚩 {flaggedList.filter(q => !answers[q.id]).length} questão(ões) marcada(s) para revisão ainda sem resposta.</p>
+                )}
               </div>
             </DialogDescription>
           </DialogHeader>
