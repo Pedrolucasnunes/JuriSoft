@@ -98,7 +98,7 @@ export function Hero() {
                   ].map((d) => (
                     <div key={d.name} className="flex items-center gap-2.5">
                       <span className="w-[110px] shrink-0 text-[11px] text-muted-foreground">{d.name}</span>
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted/50">
                         <div className={`h-full rounded-full ${d.color}`} style={{ width: `${d.pct}%` }} />
                       </div>
                       <span className="w-7 shrink-0 text-right font-mono text-[11px] text-muted-foreground">{d.pct}%</span>
