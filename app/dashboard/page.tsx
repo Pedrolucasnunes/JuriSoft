@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { TrendingUp, TrendingDown, Target, FileText, CheckCircle2, AlertTriangle, ArrowRight, Flag, List } from "lucide-react"
+import { TrendingUp, TrendingDown, Target, FileText, CheckCircle2, AlertTriangle, ArrowRight, List } from "lucide-react"
 import Link from "next/link"
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid } from "recharts"
 import { supabase } from "@/lib/supabase"
@@ -109,12 +109,19 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [userName, setUserName] = useState<string>("")
 
   useEffect(() => {
     async function fetchDashboard() {
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { setError("Usuário não autenticado"); setLoading(false); return }
+
+        const firstName = user.user_metadata?.full_name?.split(" ")[0]
+          ?? user.user_metadata?.name?.split(" ")[0]
+          ?? user.email?.split("@")[0]
+          ?? ""
+        setUserName(firstName)
 
         const res = await fetch(`/api/dashboard`)
         const json = await res.json()
@@ -147,37 +154,6 @@ export default function DashboardPage() {
     )
   }
 
-  const statsCards = [
-    {
-      title: "Último Simulado",
-      value: data?.ultimoSimulado ? `${data.ultimoSimulado.acertos}/${data.ultimoSimulado.numero_questoes}` : "—",
-      description: data?.ultimoSimulado ? `${data.ultimoSimulado.percentual}% de acerto` : "Nenhum simulado ainda",
-      icon: FileText, trend: "neutral" as const, trendValue: "",
-    },
-    {
-      title: "Taxa de Acerto Geral",
-      value: data?.resumo ? `${data.resumo.taxaGeralAcerto}%` : "—",
-      description: "Média geral acumulada",
-      icon: Target,
-      trend: (data?.resumo?.taxaGeralAcerto ?? 0) >= 70 ? "up" as const : "down" as const,
-      trendValue: "",
-    },
-    {
-      title: "Questões Resolvidas",
-      value: data?.resumo?.totalRespondidas?.toLocaleString("pt-BR") ?? "0",
-      description: "Total acumulado",
-      icon: CheckCircle2, trend: "neutral" as const, trendValue: "",
-    },
-    {
-      title: "Matérias em Risco",
-      value: String(data?.materiasRisco?.length ?? 0),
-      description: "Precisam de atenção",
-      icon: AlertTriangle,
-      trend: (data?.materiasRisco?.length ?? 0) > 0 ? "down" as const : "up" as const,
-      trendValue: "",
-    },
-  ]
-
   // Dados para o novo componente de disciplinas
   const disciplinas = data?.desempenhoPorMateria ?? []
   const sortedAsc = [...disciplinas].sort((a, b) => Number(a.taxa_acerto) - Number(b.taxa_acerto))
@@ -191,6 +167,10 @@ export default function DashboardPage() {
     percentage: Number(m.taxa),
     trend: Number(m.taxa) >= 50 ? "up" : "down",
   }))
+
+  const metaAcerto = 50
+  const taxaGeral = data?.resumo?.taxaGeralAcerto ?? 0
+  const numRisco = data?.materiasRisco?.length ?? 0
 
   return (
     <div className="space-y-6">
@@ -207,28 +187,100 @@ export default function DashboardPage() {
         </Button>
       </div>
 
+      {/* ── Banner de alerta ── */}
+      {numRisco > 0 && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-primary/30 bg-primary/10 px-4 py-3">
+          <p className="text-sm text-foreground">
+            {userName ? <><span className="font-semibold">Bom dia, {userName}.</span> </> : ""}
+            Você tem <span className="font-semibold text-primary">{numRisco} {numRisco === 1 ? "matéria em risco" : "matérias em risco"}</span>.{" "}
+            Que tal um treino rápido de 10 questões agora?
+          </p>
+          <Button size="sm" className="shrink-0" asChild>
+            <Link href="/dashboard/treino">Treinar agora</Link>
+          </Button>
+        </div>
+      )}
+
       {/* ── Stats cards ── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {statsCards.map((card) => (
-          <Card key={card.title}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
-              <card.icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-foreground">{card.value}</span>
-                {card.trendValue && (
-                  <span className={`flex items-center text-xs font-medium ${card.trend === "up" ? "text-primary" : card.trend === "down" ? "text-destructive" : "text-muted-foreground"}`}>
-                    {card.trend === "up" ? <TrendingUp className="mr-1 h-3 w-3" /> : card.trend === "down" ? <TrendingDown className="mr-1 h-3 w-3" /> : null}
-                    {card.trendValue}
-                  </span>
-                )}
+        {/* Último Simulado */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Último simulado</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <span className="text-2xl font-bold text-foreground">
+              {data?.ultimoSimulado ? `${data.ultimoSimulado.acertos}/${data.ultimoSimulado.numero_questoes}` : "—"}
+            </span>
+            {data?.ultimoSimulado && (
+              <p className={`mt-1 text-xs font-medium ${data.ultimoSimulado.percentual < 40 ? "text-destructive" : data.ultimoSimulado.percentual < 70 ? "text-yellow-500" : "text-primary"}`}>
+                {data.ultimoSimulado.percentual}% de acerto
+              </p>
+            )}
+            {!data?.ultimoSimulado && (
+              <p className="mt-1 text-xs text-muted-foreground">Nenhum simulado ainda</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Taxa de Acerto Geral */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Taxa de acerto geral</CardTitle>
+            <Target className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <span className="text-2xl font-bold text-foreground">{taxaGeral}%</span>
+            <div className="mt-2 space-y-1">
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>Atual</span>
+                <span>meta: {metaAcerto}%</span>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">{card.description}</p>
-            </CardContent>
-          </Card>
-        ))}
+              <Progress value={taxaGeral} className="h-1.5" />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>0%</span>
+                <span>{metaAcerto}%</span>
+                <span>100%</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Questões Resolvidas */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Questões resolvidas</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <span className="text-2xl font-bold text-foreground">
+              {data?.resumo?.totalRespondidas?.toLocaleString("pt-BR") ?? "0"}
+            </span>
+            <p className="mt-1 text-xs text-muted-foreground">Total acumulado</p>
+          </CardContent>
+        </Card>
+
+        {/* Matérias em Risco */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Matérias em risco</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="flex items-end justify-between">
+            <div>
+              <span className="text-2xl font-bold text-foreground">{numRisco}</span>
+              <p className="mt-1 text-xs text-muted-foreground">Precisam de atenção</p>
+            </div>
+            {numRisco > 0 && (
+              <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" asChild>
+                <Link href="/dashboard/treino">
+                  Treinar <ArrowRight className="h-3 w-3" />
+                </Link>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* ── Gráficos ── */}
@@ -243,7 +295,32 @@ export default function DashboardPage() {
           <CardContent>
             {(data?.evolucao?.length ?? 0) === 0 ? (
               <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
-                Conclua simulados para ver sua evolução
+                Faça mais simulados para ver sua curva de progresso
+              </div>
+            ) : (data?.evolucao?.length ?? 0) === 1 ? (
+              <div className="space-y-2">
+                <div className="h-[260px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={data!.evolucao}>
+                      <defs>
+                        <linearGradient id="colorNota" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
+                      <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" domain={[0, 100]} />
+                      <RechartsTooltip
+                        contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
+                        labelStyle={{ color: "hsl(var(--foreground))" }}
+                        formatter={(value: number) => [`${value}%`, "Aproveitamento"]}
+                      />
+                      <Area type="monotone" dataKey="nota" stroke="var(--chart-1)" strokeWidth={2} fillOpacity={1} fill="url(#colorNota)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-center text-xs text-muted-foreground">1 simulado realizado — continue para ver sua evolução</p>
               </div>
             ) : (
               <div className="h-[300px]">
