@@ -8,7 +8,6 @@ import {
   FileText,
   Users,
   BarChart3,
-  Scale,
   LogOut,
   Settings,
 } from "lucide-react"
@@ -68,11 +67,9 @@ export function AdminSidebar() {
     <Sidebar variant="sidebar" collapsible="icon">
       <SidebarHeader className="p-4">
         <Link href="/admin" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive">
-            <Scale className="h-5 w-5 text-destructive-foreground" />
-          </div>
-          <span className="text-lg font-semibold text-foreground group-data-[collapsible=icon]:hidden">
-            JuriSoft Admin
+          <img src="/Sem fundo.png" alt="AprovaOAB" className="h-8 w-8 object-contain" />
+          <span className="text-lg font-semibold group-data-[collapsible=icon]:hidden">
+            <span className="text-primary">aprova</span><span className="text-foreground/70">OAB</span><span className="text-muted-foreground text-sm"> Admin</span>
           </span>
         </Link>
       </SidebarHeader>

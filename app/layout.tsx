@@ -33,7 +33,7 @@ const dmMono = DM_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'JuriSoft - Preparação Inteligente para OAB',
+  title: 'AprovaOAB - Preparação Inteligente para OAB',
   description: 'Plataforma de diagnóstico e gestão de desempenho para aprovação na OAB através da resolução inteligente de questões.',
   generator: 'v0.app',
   icons: {

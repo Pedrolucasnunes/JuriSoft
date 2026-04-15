@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { Scale, Menu, X } from "lucide-react"
+import { Menu, X } from "lucide-react"
 import { useState } from "react"
 
 export function Header() {
@@ -15,12 +15,10 @@ export function Header() {
 
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Scale className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-foreground"
+          <img src="/Sem fundo.png" alt="AprovaOAB" className="h-8 w-8 object-contain" />
+          <span className="text-xl font-bold tracking-tight"
                 style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
-            JuriSoft
+            <span className="text-primary">aprova</span><span className="text-foreground/70">OAB</span>
           </span>
         </Link>
 

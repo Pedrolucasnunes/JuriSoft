@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { Scale } from "lucide-react"
 
 export function Footer() {
   return (
@@ -9,12 +8,10 @@ export function Footer() {
 
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
-              <Scale className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-bold tracking-tight text-foreground"
+            <img src="/Sem fundo.png" alt="AprovaOAB" className="h-7 w-7 object-contain" />
+            <span className="text-lg font-bold tracking-tight"
                   style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
-              JuriSoft
+              <span className="text-primary">aprova</span><span className="text-foreground/70">OAB</span>
             </span>
           </Link>
 
@@ -33,7 +30,7 @@ export function Footer() {
 
           {/* Copyright */}
           <p className="font-mono text-xs text-muted-foreground">
-            © {new Date().getFullYear()} JuriSoft
+            © {new Date().getFullYear()} AprovaOAB
           </p>
         </div>
       </div>

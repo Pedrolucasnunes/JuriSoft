@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Scale, ClipboardCheck, BarChart3, Target, TrendingUp } from "lucide-react"
+import { ClipboardCheck, BarChart3, Target, TrendingUp } from "lucide-react"
 
 const steps = [
   {
@@ -60,12 +60,10 @@ export function OnboardingModal() {
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="max-w-lg">
         <DialogHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary">
-            <Scale className="h-8 w-8 text-primary-foreground" />
-          </div>
-          <DialogTitle className="text-2xl">Bem-vindo ao JuriSoft</DialogTitle>
+          <img src="/Sem fundo.png" alt="AprovaOAB" className="mx-auto mb-4 h-16 w-16 object-contain" />
+          <DialogTitle className="text-2xl">Bem-vindo ao AprovaOAB</DialogTitle>
           <DialogDescription className="text-base text-pretty">
-            O JuriSoft analisa seu desempenho em questões da OAB e identifica exatamente o que você precisa estudar para aumentar suas chances de aprovação.
+            O AprovaOAB analisa seu desempenho em questões da OAB e identifica exatamente o que você precisa estudar para aumentar suas chances de aprovação.
           </DialogDescription>
         </DialogHeader>
 

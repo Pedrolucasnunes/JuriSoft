@@ -11,7 +11,6 @@ import {
   Dumbbell,
   BarChart3,
   User,
-  Scale,
   LogOut,
 } from "lucide-react"
 import {
@@ -99,11 +98,9 @@ export function AppSidebar() {
     <Sidebar variant="sidebar" collapsible="icon">
       <SidebarHeader className="p-4">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Scale className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <span className="text-lg font-semibold text-foreground group-data-[collapsible=icon]:hidden">
-            JuriSoft
+          <img src="/Sem fundo.png" alt="AprovaOAB" className="h-8 w-8 object-contain" />
+          <span className="text-lg font-semibold group-data-[collapsible=icon]:hidden">
+            <span className="text-primary">aprova</span><span className="text-foreground/70">OAB</span>
           </span>
         </Link>
       </SidebarHeader>

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Scale, ArrowLeft, Eye, EyeOff } from "lucide-react"
+import { ArrowLeft, Eye, EyeOff } from "lucide-react"
 import { createBrowserClient } from "@supabase/ssr"
 
 export default function LoginPage() {
@@ -71,9 +71,7 @@ export default function LoginPage() {
         <Card className="w-full max-w-md border-border">
           <CardHeader className="space-y-4 text-center">
             <Link href="/" className="mx-auto flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-                <Scale className="h-6 w-6 text-primary-foreground" />
-              </div>
+              <img src="/Sem fundo.png" alt="AprovaOAB" className="h-12 w-12 object-contain" />
             </Link>
             <div>
               <CardTitle className="text-2xl font-bold text-foreground">Bem-vindo de volta</CardTitle>

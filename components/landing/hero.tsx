@@ -39,7 +39,7 @@ export function Hero() {
 
             <FadeIn delay={200} duration={700}>
               <p className="mt-6 max-w-[480px] text-lg leading-relaxed text-muted-foreground">
-                O JuriSoft analisa seus erros questão por questão, identifica suas matérias mais fracas e gera um treino focado — para você parar de desperdiçar tempo e passar na OAB.
+                O AprovaOAB analisa seus erros questão por questão, identifica suas matérias mais fracas e gera um treino focado — para você parar de desperdiçar tempo e passar na OAB.
               </p>
             </FadeIn>
 
