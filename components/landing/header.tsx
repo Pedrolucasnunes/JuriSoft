@@ -50,7 +50,7 @@ export function Header() {
 
         {/* Hamburger mobile */}
         <button
-          className="p-2 md:hidden"
+          className="rounded-md p-2 transition-colors duration-150 hover:bg-muted active:scale-[0.95] md:hidden"
           onClick={() => setIsMenuOpen(!isMenuOpen)}
           aria-label="Menu"
         >

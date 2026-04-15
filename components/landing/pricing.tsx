@@ -91,10 +91,10 @@ export function Pricing() {
           {plans.map((plan, index) => (
             <FadeIn key={plan.id} delay={index * 120} duration={700}>
               <div
-                className={`relative flex h-full flex-col rounded-2xl border p-8 transition-all ${
+                className={`relative flex h-full flex-col rounded-2xl border p-8 ${
                   plan.highlight
                     ? "border-primary bg-primary text-primary-foreground shadow-2xl shadow-primary/20 ring-1 ring-primary"
-                    : "border-border bg-card hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
+                    : "card-hover border-border bg-card hover:border-primary/40 hover:shadow-primary/5"
                 }`}
               >
                 {/* Badge */}

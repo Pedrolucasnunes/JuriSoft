@@ -177,3 +177,26 @@
 .font-mono {
   font-family: var(--font-dm-mono), var(--font-geist-mono), monospace;
 }
+
+/* ── Padrão de hover interativo ─────────────────────────────────
+   .card-hover  → cards e painéis clicáveis
+   .hover-lift  → elementos que sobem levemente ao hover (links, badges)
+   ─────────────────────────────────────────────────────────────── */
+@layer utilities {
+  .card-hover {
+    cursor: pointer;
+    transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+  }
+  .card-hover:hover {
+    transform: scale(1.015) translateY(-1px);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.06);
+  }
+
+  .hover-lift {
+    transition: transform 150ms ease, opacity 150ms ease;
+  }
+  .hover-lift:hover {
+    transform: scale(1.04);
+    opacity: 0.9;
+  }
+}

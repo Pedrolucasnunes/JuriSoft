@@ -61,7 +61,7 @@ export function Features() {
         <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((feature, index) => (
             <FadeIn key={feature.title} delay={index * 100} duration={600}>
-              <div className="group h-full rounded-2xl border border-border bg-card p-6 transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
+              <div className="card-hover group h-full rounded-2xl border border-border bg-card p-6 hover:border-primary/50 hover:shadow-primary/5">
                 <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
                   <feature.icon className="h-5 w-5 text-primary" />
                 </div>
