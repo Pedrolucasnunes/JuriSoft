@@ -7,7 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { FileText, Clock, Play, Loader2, RotateCcw } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { FileText, Clock, Play, Loader2, RotateCcw, Trash2, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 
 interface SimuladoRealizado {
@@ -24,6 +25,8 @@ export default function SimuladosPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [refazendoId, setRefazendoId] = useState<string | null>(null)
+  const [deletandoId, setDeletandoId] = useState<string | null>(null)
+  const [confirmarExclusao, setConfirmarExclusao] = useState<SimuladoRealizado | null>(null)
   const [loadingHistorico, setLoadingHistorico] = useState(true)
   const [simuladosRealizados, setSimuladosRealizados] = useState<SimuladoRealizado[]>([])
 
@@ -40,6 +43,7 @@ export default function SimuladosPage() {
         .from("simulados")
         .select("id, titulo, created_at, acertos, erros, percentual, numero_questoes")
         .eq("user_id", user.id)
+        .not("acertos", "is", null)
         .order("created_at", { ascending: false })
 
       setSimuladosRealizados(data ?? [])
@@ -72,6 +76,27 @@ export default function SimuladosPage() {
     } finally {
       setLoading(false)
       setRefazendoId(null)
+    }
+  }
+
+  const deletarSimulado = async () => {
+    if (!confirmarExclusao) return
+    const id = confirmarExclusao.id
+    setDeletandoId(id)
+    try {
+      const res = await fetch(`/api/simulados/${id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const data = await res.json()
+        toast.error(data.error ?? "Erro ao excluir simulado")
+        return
+      }
+      setSimuladosRealizados((prev) => prev.filter((s) => s.id !== id))
+      setConfirmarExclusao(null)
+      toast.success("Simulado excluído")
+    } catch {
+      toast.error("Erro inesperado ao excluir simulado")
+    } finally {
+      setDeletandoId(null)
     }
   }
 
@@ -188,7 +213,7 @@ export default function SimuladosPage() {
                           variant="outline"
                           size="sm"
                           className="flex-1"
-                          onClick={() => router.push(`/dashboard/simulados/${s.id}`)}
+                          onClick={() => router.push(`/dashboard/simulados/${s.id}?gabarito=true`)}
                         >
                           Ver gabarito
                         </Button>
@@ -204,6 +229,18 @@ export default function SimuladosPage() {
                             : <><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Refazer</>
                           }
                         </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-destructive hover:text-destructive hover:border-destructive/50"
+                          onClick={() => setConfirmarExclusao(s)}
+                          disabled={deletandoId === s.id}
+                        >
+                          {deletandoId === s.id
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <Trash2 className="h-3.5 w-3.5" />
+                          }
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -213,6 +250,48 @@ export default function SimuladosPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* ── Dialog de confirmação de exclusão ── */}
+      <Dialog open={!!confirmarExclusao} onOpenChange={(open) => { if (!open) setConfirmarExclusao(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Excluir simulado
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-1 text-sm text-muted-foreground">
+                <p>Você está prestes a excluir o simulado:</p>
+                <p className="font-medium text-foreground">
+                  {confirmarExclusao?.titulo ?? "Simulado OAB"} — {confirmarExclusao ? formatDate(confirmarExclusao.created_at) : ""}
+                </p>
+                <p className="text-destructive/80">Esta ação não pode ser desfeita.</p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setConfirmarExclusao(null)}
+              disabled={!!deletandoId}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1"
+              onClick={deletarSimulado}
+              disabled={!!deletandoId}
+            >
+              {deletandoId
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Excluindo...</>
+                : <><Trash2 className="mr-2 h-4 w-4" /> Excluir</>
+              }
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

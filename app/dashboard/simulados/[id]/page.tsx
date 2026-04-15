@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, use, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -64,6 +64,8 @@ const AVISOS = [
 export default function SimuladoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: simuladoId } = use(params)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const modoGabarito = searchParams.get("gabarito") === "true"
 
   const [questoes, setQuestoes] = useState<Questao[]>([])
   const [loadingQuestoes, setLoadingQuestoes] = useState(true)
@@ -80,7 +82,6 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
 
   useEffect(() => {
     async function init() {
-      // ✅ createBrowserClient dentro do componente
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -88,6 +89,20 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
 
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push("/login"); return }
+
+      // Modo gabarito: carrega resultado diretamente sem montar o simulado
+      if (modoGabarito) {
+        const res = await fetch(`/api/simulados/${simuladoId}/gabarito`)
+        const data = await res.json()
+        if (!res.ok) {
+          toast.error(data.error ?? "Erro ao carregar gabarito")
+          router.push("/dashboard/simulados")
+          return
+        }
+        setResultado(data)
+        setLoadingQuestoes(false)
+        return
+      }
 
       const res = await fetch(`/api/simulados/${simuladoId}/questoes`)
       const data = await res.json()
@@ -101,7 +116,7 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
       setLoadingQuestoes(false)
     }
     init()
-  }, [simuladoId])
+  }, [simuladoId, modoGabarito])
 
   useEffect(() => {
     if (resultado) return
@@ -208,8 +223,12 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
     return (
       <div className="space-y-6 pb-10">
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-foreground">Simulado Concluído!</h1>
-          <p className="text-muted-foreground">Confira seu resultado abaixo</p>
+          <h1 className="text-3xl font-bold text-foreground">
+            {modoGabarito ? "Gabarito do Simulado" : "Simulado Concluído!"}
+          </h1>
+          <p className="text-muted-foreground">
+            {modoGabarito ? "Veja as respostas corretas e seu desempenho" : "Confira seu resultado abaixo"}
+          </p>
         </div>
         <div className="grid grid-cols-2 gap-4 max-w-lg mx-auto sm:grid-cols-4">
           {[
