@@ -12,6 +12,7 @@ import {
   BarChart3,
   User,
   LogOut,
+  CalendarDays,
 } from "lucide-react"
 import {
   Sidebar,
@@ -40,8 +41,9 @@ const menuItems = [
   { title: "Simulados", url: "/dashboard/simulados", icon: FileText },
   { title: "Banco de Questões", url: "/dashboard/questoes", icon: Database },
   { title: "Treino Estratégico", url: "/dashboard/treino", icon: Dumbbell },
-  { title: "Desempenho", url: "/dashboard/desempenho", icon: BarChart3 },
-  { title: "Perfil", url: "/dashboard/perfil", icon: User },
+  { title: "Desempenho",        url: "/dashboard/desempenho",  icon: BarChart3 },
+  { title: "Agenda Inteligente", url: "/dashboard/calendario", icon: CalendarDays },
+  { title: "Perfil",            url: "/dashboard/perfil",      icon: User },
 ]
 
 interface UserInfo {
