@@ -9,8 +9,7 @@ import { Label } from "@/components/ui/label"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Search, Filter, CheckCircle2, XCircle, Loader2 } from "lucide-react"
+import { Search, SlidersHorizontal, CheckCircle2, XCircle, Loader2, RotateCcw } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
 interface Questao {
@@ -46,17 +45,33 @@ function getDificuldadeColor(dificuldade: string) {
   switch (dificuldade?.toLowerCase()) {
     case "fácil":
     case "facil":
-      return "bg-primary/20 text-primary"
+      return "bg-primary/15 text-primary border-primary/20"
     case "média":
     case "media":
     case "médio":
-      return "bg-warning/20 text-warning"
+    case "medio":
+      return "bg-yellow-500/15 text-yellow-500 border-yellow-500/20"
     case "difícil":
     case "dificil":
-      return "bg-destructive/20 text-destructive"
+      return "bg-destructive/15 text-destructive border-destructive/20"
     default:
-      return "bg-secondary text-muted-foreground"
+      return "bg-muted text-muted-foreground"
   }
+}
+
+function LetraBox({ letra, estado }: { letra: string; estado: "neutro" | "selecionado" | "correto" | "errado" | "desbotado" }) {
+  const classes = {
+    neutro: "bg-muted text-muted-foreground",
+    selecionado: "bg-primary/20 text-primary",
+    correto: "bg-primary text-primary-foreground",
+    errado: "bg-destructive text-destructive-foreground",
+    desbotado: "bg-muted/50 text-muted-foreground/50",
+  }
+  return (
+    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded text-xs font-bold ${classes[estado]}`}>
+      {letra}
+    </span>
+  )
 }
 
 function QuestaoCard({ questao, userId }: { questao: Questao; userId: string }) {
@@ -81,141 +96,126 @@ function QuestaoCard({ questao, userId }: { questao: Questao; userId: string }) 
     const res = await fetch("/api/simulados/resposta", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId,
-        questionId: questao.id,
-        simuladoId: null,
-        resposta,
-      }),
+      body: JSON.stringify({ userId, questionId: questao.id, simuladoId: null, resposta }),
     })
 
     const data = await res.json()
     setVerificando(false)
 
-    if (!res.ok) {
-      console.error("Erro ao verificar:", data.error)
-      return
-    }
+    if (!res.ok) { console.error("Erro ao verificar:", data.error); return }
 
     setAcertou(data.acertou)
     setRespostaCorreta(data.resposta_correta)
     setMostrarResposta(true)
 
-    // Busca explicação da questão
     const { data: qData } = await supabase
-      .from("questions")
-      .select("explicacao")
-      .eq("id", questao.id)
-      .single()
-
+      .from("questions").select("explicacao").eq("id", questao.id).single()
     if (qData?.explicacao) setExplicacao(qData.explicacao)
   }
 
   const handleTentarNovamente = () => {
-    setResposta("")
-    setMostrarResposta(false)
-    setRespostaCorreta(null)
-    setExplicacao(null)
-    setAcertou(null)
+    setResposta(""); setMostrarResposta(false)
+    setRespostaCorreta(null); setExplicacao(null); setAcertou(null)
+  }
+
+  const getEstadoLetra = (letra: string) => {
+    if (!mostrarResposta) return resposta === letra ? "selecionado" : "neutro"
+    if (letra === respostaCorreta) return "correto"
+    if (letra === resposta) return "errado"
+    return "desbotado"
   }
 
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
-        {/* Header da questão */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-secondary/30 p-4">
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/30 px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{questao.subject_name}</Badge>
-            <Badge variant="outline">{questao.topic_name}</Badge>
+            <Badge className="bg-primary/15 text-primary border border-primary/20 font-medium">
+              {questao.subject_name}
+            </Badge>
+            {questao.topic_name && (
+              <span className="text-xs text-muted-foreground">{questao.topic_name}</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {questao.dificuldade && (
-              <Badge className={getDificuldadeColor(questao.dificuldade)}>
+              <Badge className={`border text-xs ${getDificuldadeColor(questao.dificuldade)}`}>
                 {questao.dificuldade}
               </Badge>
             )}
             {(questao.banca || questao.ano) && (
-              <span className="text-xs text-muted-foreground">
-                {questao.banca} {questao.ano}
+              <span className="font-mono text-xs text-muted-foreground">
+                {[questao.banca, questao.ano].filter(Boolean).join(" · ")}
               </span>
             )}
           </div>
         </div>
 
-        <div className="p-4">
-          <p className="mb-4 text-foreground leading-relaxed">{questao.enunciado}</p>
+        {/* Enunciado */}
+        <div className="px-4 pt-4 pb-3">
+          <p className="text-sm leading-relaxed text-foreground">{questao.enunciado}</p>
+        </div>
 
-          <RadioGroup
-            value={resposta}
-            onValueChange={setResposta}
-            className="space-y-2"
-            disabled={mostrarResposta}
-          >
-            {alternativas.map((alt) => (
-              <div
+        {/* Alternativas */}
+        <div className="space-y-2 px-4 pb-4">
+          {alternativas.map((alt) => {
+            const estado = getEstadoLetra(alt.letra)
+            const isCorreto = mostrarResposta && alt.letra === respostaCorreta
+            const isErrado = mostrarResposta && alt.letra === resposta && alt.letra !== respostaCorreta
+            const isDesbotado = mostrarResposta && alt.letra !== respostaCorreta && alt.letra !== resposta
+
+            return (
+              <button
                 key={alt.letra}
-                className={`flex items-start gap-3 rounded-lg border p-3 transition-colors ${
-                  mostrarResposta
-                    ? alt.letra === respostaCorreta
-                      ? "border-primary bg-primary/5"
-                      : resposta === alt.letra
-                      ? "border-destructive bg-destructive/5"
-                      : "border-border"
+                disabled={mostrarResposta}
+                onClick={() => !mostrarResposta && setResposta(alt.letra)}
+                className={`w-full flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-all duration-150 ${
+                  isCorreto
+                    ? "border-primary/40 bg-primary/8"
+                    : isErrado
+                    ? "border-destructive/40 bg-destructive/8"
+                    : isDesbotado
+                    ? "border-border/50 opacity-50"
                     : resposta === alt.letra
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/50"
+                    ? "border-primary/50 bg-primary/5"
+                    : "border-border hover:border-primary/40 hover:bg-muted/40 cursor-pointer"
                 }`}
               >
-                <RadioGroupItem value={alt.letra} id={`q${questao.id}-${alt.letra}`} className="mt-0.5" />
-                <Label
-                  htmlFor={`q${questao.id}-${alt.letra}`}
-                  className="flex-1 cursor-pointer text-sm text-foreground"
-                >
-                  <span className="font-medium">{alt.letra})</span> {alt.texto}
-                </Label>
-                {mostrarResposta && alt.letra === respostaCorreta && (
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-primary" />
-                )}
-                {mostrarResposta && resposta === alt.letra && alt.letra !== respostaCorreta && (
-                  <XCircle className="h-5 w-5 shrink-0 text-destructive" />
-                )}
-              </div>
-            ))}
-          </RadioGroup>
+                <LetraBox letra={alt.letra} estado={estado} />
+                <span className={`flex-1 text-sm leading-relaxed ${isDesbotado ? "text-muted-foreground" : "text-foreground"}`}>
+                  {alt.texto}
+                </span>
+                {isCorreto && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary mt-0.5" />}
+                {isErrado && <XCircle className="h-4 w-4 shrink-0 text-destructive mt-0.5" />}
+              </button>
+            )
+          })}
 
-          {/* Feedback */}
+          {/* Gabarito + Explicação */}
           {mostrarResposta && (
-            <div className="mt-4 rounded-lg border border-border bg-secondary/30 p-4">
-              <div className="mb-2 flex items-center gap-2">
-                {acertou ? (
-                  <>
-                    <CheckCircle2 className="h-5 w-5 text-primary" />
-                    <span className="font-medium text-primary">Resposta correta!</span>
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="h-5 w-5 text-destructive" />
-                    <span className="font-medium text-destructive">Resposta incorreta</span>
-                  </>
-                )}
-              </div>
+            <div className={`mt-1 rounded-lg border p-4 ${acertou ? "border-primary/30 bg-primary/5" : "border-destructive/30 bg-destructive/5"}`}>
+              <p className={`text-sm font-semibold ${acertou ? "text-primary" : "text-destructive"}`}>
+                Gabarito {respostaCorreta} — {acertou ? "Correto" : "Incorreto"}
+              </p>
               {explicacao && (
-                <p className="text-sm text-muted-foreground">{explicacao}</p>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{explicacao}</p>
               )}
             </div>
           )}
 
-          <div className="mt-4 flex items-center justify-end">
+          {/* Ações */}
+          <div className="flex justify-end pt-1">
             {!mostrarResposta ? (
-              <Button onClick={handleVerificar} disabled={!resposta || verificando}>
+              <Button size="sm" onClick={handleVerificar} disabled={!resposta || verificando}>
                 {verificando
-                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando...</>
+                  ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Verificando...</>
                   : "Verificar resposta"
                 }
               </Button>
             ) : (
-              <Button variant="outline" onClick={handleTentarNovamente}>
-                Tentar novamente
+              <Button size="sm" variant="outline" onClick={handleTentarNovamente}>
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Tentar novamente
               </Button>
             )}
           </div>
@@ -232,16 +232,14 @@ export default function QuestoesPage() {
   const [pagination, setPagination] = useState<Pagination>({ total: 0, page: 1, limit: 10, totalPages: 0 })
   const [loading, setLoading] = useState(true)
   const [loadingFiltros, setLoadingFiltros] = useState(true)
+  const [showFiltrosAvancados, setShowFiltrosAvancados] = useState(false)
 
-  // Estados dos filtros
   const [searchTerm, setSearchTerm] = useState("")
   const [subjectId, setSubjectId] = useState("todas")
   const [dificuldade, setDificuldade] = useState("todas")
   const [banca, setBanca] = useState("todas")
-  const [showFilters, setShowFilters] = useState(false)
   const [page, setPage] = useState(1)
 
-  // Busca usuário e filtros ao montar
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -255,10 +253,8 @@ export default function QuestoesPage() {
     init()
   }, [])
 
-  // Busca questões quando filtros ou página mudam
   const fetchQuestoes = useCallback(async () => {
     setLoading(true)
-
     const params = new URLSearchParams()
     params.set("page", String(page))
     if (subjectId !== "todas") params.set("subjectId", subjectId)
@@ -268,117 +264,117 @@ export default function QuestoesPage() {
 
     const res = await fetch(`/api/questions?${params.toString()}`)
     const data = await res.json()
-
     setQuestoes(data.questions ?? [])
     setPagination(data.pagination ?? { total: 0, page: 1, limit: 10, totalPages: 0 })
     setLoading(false)
   }, [page, subjectId, dificuldade, banca, searchTerm])
 
-  useEffect(() => {
-    fetchQuestoes()
-  }, [fetchQuestoes])
+  useEffect(() => { fetchQuestoes() }, [fetchQuestoes])
 
   const handleLimparFiltros = () => {
-    setSubjectId("todas")
-    setDificuldade("todas")
-    setBanca("todas")
-    setSearchTerm("")
-    setPage(1)
+    setSubjectId("todas"); setDificuldade("todas")
+    setBanca("todas"); setSearchTerm(""); setPage(1)
   }
 
+  const temFiltrosAtivos = subjectId !== "todas" || dificuldade !== "todas" || banca !== "todas"
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">Banco de Questões</h1>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           {pagination.total > 0
             ? `${pagination.total.toLocaleString("pt-BR")} questões organizadas por disciplina e tema`
-            : "Questões organizadas por disciplina e tema"
-          }
+            : "Questões organizadas por disciplina e tema"}
         </p>
       </div>
 
-      {/* Barra de busca e filtros */}
-      <div className="space-y-4">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por tema ou palavra-chave..."
-              value={searchTerm}
-              onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
-              className="pl-10"
-            />
-          </div>
-          <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
-            <Filter className="mr-2 h-4 w-4" />
-            Filtros
-          </Button>
+      {/* Busca + botão filtros avançados */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por tema ou palavra-chave..."
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
+            className="pl-10"
+          />
         </div>
+        <Button
+          variant="outline"
+          onClick={() => setShowFiltrosAvancados(!showFiltrosAvancados)}
+          className={temFiltrosAtivos ? "border-primary/50 text-primary" : ""}
+        >
+          <SlidersHorizontal className="mr-2 h-4 w-4" />
+          Filtros
+          {temFiltrosAtivos && (
+            <span className="ml-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground font-bold">
+              {(subjectId !== "todas" ? 1 : 0) + (dificuldade !== "todas" ? 1 : 0) + (banca !== "todas" ? 1 : 0)}
+            </span>
+          )}
+        </Button>
+      </div>
 
-        {showFilters && (
-          <Card>
-            <CardContent className="p-4">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="space-y-2">
-                  <Label>Disciplina</Label>
-                  <Select value={subjectId} onValueChange={(v) => { setSubjectId(v); setPage(1) }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todas">Todas</SelectItem>
-                      {loadingFiltros ? (
-                        <SelectItem value="loading" disabled>Carregando...</SelectItem>
-                      ) : (
-                        filtros.subjects.map((s) => (
+      {/* Filtros avançados */}
+      {showFiltrosAvancados && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="grid gap-4 sm:grid-cols-4">
+              <div className="space-y-2">
+                <Label>Disciplina</Label>
+                <Select value={subjectId} onValueChange={(v) => { setSubjectId(v); setPage(1) }}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Todas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas</SelectItem>
+                    {loadingFiltros
+                      ? <SelectItem value="_loading" disabled>Carregando...</SelectItem>
+                      : filtros.subjects.map((s) => (
                           <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                         ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Dificuldade</Label>
-                  <Select value={dificuldade} onValueChange={(v) => { setDificuldade(v); setPage(1) }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todas">Todas</SelectItem>
-                      {filtros.dificuldades.map((d) => (
-                        <SelectItem key={d} value={d}>{d}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Banca</Label>
-                  <Select value={banca} onValueChange={(v) => { setBanca(v); setPage(1) }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todas">Todas</SelectItem>
-                      {filtros.bancas.map((b) => (
-                        <SelectItem key={b} value={b}>{b}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-end">
-                  <Button variant="outline" onClick={handleLimparFiltros} className="w-full">
-                    Limpar filtros
-                  </Button>
-                </div>
+                    }
+                  </SelectContent>
+                </Select>
               </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+              <div className="space-y-2">
+                <Label>Dificuldade</Label>
+                <Select value={dificuldade} onValueChange={(v) => { setDificuldade(v); setPage(1) }}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Todas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas</SelectItem>
+                    {filtros.dificuldades.map((d) => (
+                      <SelectItem key={d} value={d}>{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Banca</Label>
+                <Select value={banca} onValueChange={(v) => { setBanca(v); setPage(1) }}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Todas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas</SelectItem>
+                    {filtros.bancas.map((b) => (
+                      <SelectItem key={b} value={b}>{b}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end">
+                <Button variant="outline" onClick={handleLimparFiltros} className="w-full">
+                  Limpar filtros
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Lista de questões */}
       {loading ? (
@@ -400,21 +396,13 @@ export default function QuestoesPage() {
       {/* Paginação */}
       {pagination.totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setPage((p) => p - 1)}
-            disabled={page === 1 || loading}
-          >
+          <Button variant="outline" onClick={() => setPage((p) => p - 1)} disabled={page === 1 || loading}>
             Anterior
           </Button>
           <span className="px-4 text-sm text-muted-foreground">
             Página {pagination.page} de {pagination.totalPages}
           </span>
-          <Button
-            variant="outline"
-            onClick={() => setPage((p) => p + 1)}
-            disabled={page === pagination.totalPages || loading}
-          >
+          <Button variant="outline" onClick={() => setPage((p) => p + 1)} disabled={page === pagination.totalPages || loading}>
             Próximo
           </Button>
         </div>
