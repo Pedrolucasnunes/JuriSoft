@@ -279,9 +279,9 @@ export function AvailabilityPanel({ availability, onSaveAndGenerate, onClose }: 
                 type="button"
                 onClick={() => applyPreset(p)}
                 className="flex items-center gap-1.5 rounded-full border border-border bg-muted/50
-                  px-3 py-1 text-xs text-foreground transition-all duration-150
-                  hover:border-primary/50 hover:bg-primary/10 hover:text-primary hover:scale-[1.03]
-                  active:scale-95"
+                  px-3 py-1.5 text-xs text-foreground transition-all duration-150
+                  hover:border-primary hover:bg-primary/20 hover:text-primary hover:shadow-[0_0_0_1px_hsl(var(--primary)/0.3)]
+                  hover:scale-[1.04] active:scale-95"
               >
                 <Icon className="h-3 w-3" />
                 {p.label}
@@ -370,8 +370,8 @@ export function AvailabilityPanel({ availability, onSaveAndGenerate, onClose }: 
                         title="Remover horário"
                         onClick={() => removeSlot(i, si)}
                         className="mb-0.5 flex h-8 w-8 items-center justify-center rounded-md
-                          text-muted-foreground/50 transition-all duration-150
-                          hover:bg-destructive/12 hover:text-destructive
+                          text-muted-foreground/40 transition-all duration-150
+                          hover:bg-red-500/20 hover:text-red-400 hover:scale-110
                           active:scale-90"
                       >
                         <X className="h-3.5 w-3.5" />
