@@ -3,27 +3,56 @@
 
 export interface AgendaEvent {
   user_id: string
-  title: string
-  type: "study" | "simulado" | "revisao" | "prova"
-  date: string   // YYYY-MM-DD
-  time: string   // HH:MM
+  title:   string
+  type:    "study" | "simulado" | "revisao" | "prova"
+  date:    string   // YYYY-MM-DD
+  time:    string   // HH:MM
   is_auto: boolean
   subject: string | null
-  reason: string | null
+  reason:  string | null
+}
+
+export interface UserAvailability {
+  day_of_week: number   // 0 = Dom … 6 = Sáb
+  start_time:  string   // HH:MM
+  end_time:    string   // HH:MM
 }
 
 interface DisciplinaClassificada {
   subject_id: string
-  nome: string
-  taxa: number
-  categoria: "critica" | "media" | "boa"
+  nome:       string
+  taxa:       number
+  categoria:  "critica" | "media" | "boa"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function getDayOfWeek(dateStr: string): number {
+  const [y, m, d] = dateStr.split("-").map(Number)
+  return new Date(y, m - 1, d).getDay()
+}
+
+function addMinutesToTime(time: string, minutes: number): string {
+  const [h, m] = time.split(":").map(Number)
+  const total = h * 60 + m + minutes
+  const hh = Math.floor(total / 60) % 24
+  const mm = total % 60
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`
+}
+
+/** Retorna horário a ~50% da janela disponível (para segunda sessão) */
+function midpointTime(start: string, end: string): string {
+  const [sh, sm] = start.split(":").map(Number)
+  const [eh, em] = end.split(":").map(Number)
+  const startMins = sh * 60 + sm
+  const endMins   = eh * 60 + em
+  const mid = startMins + Math.floor((endMins - startMins) / 2)
+  return `${String(Math.floor(mid / 60)).padStart(2, "0")}:${String(mid % 60).padStart(2, "0")}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Classifica disciplinas por taxa de acerto
-//   < 40%  → crítica   (60% do tempo de estudo)
-//  40–70%  → média     (30% do tempo de estudo)
-//   > 70%  → boa       (10% do tempo de estudo)
 // ─────────────────────────────────────────────────────────────────────────────
 function classificar(
   desempenho: { subject_id: string; nome: string; taxa_acerto: number }[]
@@ -44,7 +73,6 @@ function classificar(
     else                                   boas.push(item)
   }
 
-  // Pior desempenho primeiro
   criticas.sort((a, b) => a.taxa - b.taxa)
   medias.sort((a, b)   => a.taxa - b.taxa)
 
@@ -55,15 +83,13 @@ function classificar(
 // Função principal — gera eventos para os próximos 7 dias
 // ─────────────────────────────────────────────────────────────────────────────
 export function gerarEventos(
-  userId:     string,
-  desempenho: { subject_id: string; nome: string; taxa_acerto: number }[]
+  userId:       string,
+  desempenho:   { subject_id: string; nome: string; taxa_acerto: number }[],
+  availability: UserAvailability[] = []
 ): AgendaEvent[] {
   const { criticas, medias, boas } = classificar(desempenho)
 
-  // Índices de rotação por categoria
-  let cIdx = 0
-  let mIdx = 0
-  let bIdx = 0
+  let cIdx = 0, mIdx = 0, bIdx = 0
 
   const pickCritical = (): DisciplinaClassificada | null =>
     criticas.length ? criticas[cIdx++ % criticas.length] : null
@@ -102,10 +128,36 @@ export function gerarEventos(
     return d.toISOString().split("T")[0]
   }
 
+  // Resolve horários da sessão com base na disponibilidade do dia
+  // Suporta múltiplos slots por dia (ex: 08:00-09:00 e 19:00-21:00)
+  const resolveSessionTimes = (date: string) => {
+    if (availability.length === 0) {
+      return { session1: "08:00", session2: "19:00", hasAvail: true }
+    }
+
+    const dow       = getDayOfWeek(date)
+    const daySlots  = availability
+      .filter((a) => a.day_of_week === dow)
+      .sort((a, b) => a.start_time.localeCompare(b.start_time))
+
+    if (!daySlots.length) return { session1: "08:00", session2: "19:00", hasAvail: false }
+
+    // Sessão 1: início do primeiro slot
+    const session1 = daySlots[0].start_time.slice(0, 5)
+
+    // Sessão 2: início do segundo slot (se existir) ou ponto médio do primeiro
+    const session2 = daySlots.length > 1
+      ? daySlots[1].start_time.slice(0, 5)
+      : midpointTime(daySlots[0].start_time, daySlots[0].end_time)
+
+    return { session1, session2, hasAvail: true }
+  }
+
   const events: AgendaEvent[] = []
 
   for (let day = 0; day < 7; day++) {
     const date = dateStr(day)
+    const { session1, session2, hasAvail } = resolveSessionTimes(date)
 
     // ── Dia 4 (index 3): Simulado completo ──────────────────────────
     if (day === 3) {
@@ -114,7 +166,7 @@ export function gerarEventos(
         title:   "Simulado Completo OAB",
         type:    "simulado",
         date,
-        time:    "09:00",
+        time:    session1,
         is_auto: true,
         subject: null,
         reason:  "Simulado semanal para medir seu progresso e simular as condições reais da prova.",
@@ -131,7 +183,7 @@ export function gerarEventos(
           title:   `Treino: ${d.nome}`,
           type:    "study",
           date,
-          time:    "09:00",
+          time:    session1,
           is_auto: true,
           subject: d.nome,
           reason:  reasonFor(d),
@@ -142,7 +194,7 @@ export function gerarEventos(
         title:   "Revisão Geral da Semana",
         type:    "revisao",
         date,
-        time:    "19:00",
+        time:    session2,
         is_auto: true,
         subject: null,
         reason:  "Revisão de todos os conteúdos estudados na semana para consolidar o aprendizado.",
@@ -150,7 +202,7 @@ export function gerarEventos(
       continue
     }
 
-    // ── Dias regulares: manhã + noite ────────────────────────────────
+    // ── Dias regulares: 1ª sessão ────────────────────────────────────
     const morning = pickWeighted()
     if (morning) {
       events.push({
@@ -158,15 +210,15 @@ export function gerarEventos(
         title:   `Treino: ${morning.nome}`,
         type:    "study",
         date,
-        time:    "08:00",
+        time:    session1,
         is_auto: true,
         subject: morning.nome,
         reason:  reasonFor(morning),
       })
     }
 
+    // ── 2ª sessão: alternando treino e revisão ───────────────────────
     if (day % 2 === 1) {
-      // Dias ímpares → revisão do bloco
       const ultimas = events
         .filter((e) => e.type === "study" && e.subject)
         .slice(-2)
@@ -178,13 +230,12 @@ export function gerarEventos(
         title:   "Revisão do Bloco",
         type:    "revisao",
         date,
-        time:    "19:00",
+        time:    session2,
         is_auto: true,
         subject: null,
         reason:  `Revisão de ${ultimas || "conteúdos recentes"} para fixar o que foi aprendido.`,
       })
     } else {
-      // Dias pares → mais um treino
       const evening = pickWeighted()
       if (evening) {
         events.push({
@@ -192,7 +243,7 @@ export function gerarEventos(
           title:   `Treino: ${evening.nome}`,
           type:    "study",
           date,
-          time:    "19:00",
+          time:    session2,
           is_auto: true,
           subject: evening.nome,
           reason:  reasonFor(evening),

@@ -77,7 +77,19 @@ export async function POST(req: NextRequest) {
     }))
   }
 
-  // 5. Remove eventos automáticos existentes dos próximos 7 dias
+  // 5. Busca disponibilidade do usuário
+  const { data: availabilityRaw } = await supabase
+    .from("user_availability")
+    .select("day_of_week, start_time, end_time")
+    .eq("user_id", userId)
+
+  const availability = (availabilityRaw ?? []).map((a) => ({
+    day_of_week: a.day_of_week,
+    start_time:  String(a.start_time).slice(0, 5),
+    end_time:    String(a.end_time).slice(0, 5),
+  }))
+
+  // 6. Remove eventos automáticos existentes dos próximos 7 dias
   const today   = new Date()
   const endDate = new Date()
   endDate.setDate(today.getDate() + 6)
@@ -93,8 +105,8 @@ export async function POST(req: NextRequest) {
     .gte("date", todayStr)
     .lte("date", endDateStr)
 
-  // 6. Gera e insere novos eventos
-  const events = gerarEventos(userId, desempenho)
+  // 7. Gera e insere novos eventos (com disponibilidade)
+  const events = gerarEventos(userId, desempenho, availability)
 
   const { data: inserted, error: insertError } = await supabase
     .from("calendar_events")
