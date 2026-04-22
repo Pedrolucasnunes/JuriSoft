@@ -59,7 +59,7 @@ export default function DesempenhoPage() {
       .from("simulados")
       .select("id, acertos, erros, percentual, numero_questoes, created_at")
       .eq("user_id", uid)
-      .gt("acertos", 0)
+      .not("percentual", "is", null)
       .order("created_at", { ascending: true })
 
     if (!data || data.length === 0) return
@@ -78,15 +78,17 @@ export default function DesempenhoPage() {
     })
 
     const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-    const porMes: Record<string, { soma: number; count: number }> = {}
+    const porMes: Record<string, { soma: number; count: number; label: string }> = {}
     data.forEach(s => {
-      const key = meses[new Date(s.created_at).getMonth()]
-      if (!porMes[key]) porMes[key] = { soma: 0, count: 0 }
+      const d = new Date(s.created_at)
+      const key = `${d.getFullYear()}-${d.getMonth()}`
+      const label = `${meses[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`
+      if (!porMes[key]) porMes[key] = { soma: 0, count: 0, label }
       porMes[key].soma += s.percentual
       porMes[key].count++
     })
-    setEvolutionData(Object.entries(porMes).map(([date, v]) => ({
-      date,
+    setEvolutionData(Object.entries(porMes).map(([, v]) => ({
+      date: v.label,
       nota: parseFloat((v.soma / v.count).toFixed(1)),
       meta: 60,
     })))
@@ -95,7 +97,7 @@ export default function DesempenhoPage() {
   async function fetchQuestoes(uid: string) {
     const { data } = await supabase
       .from("question_attempts")
-      .select("acertou, created_at")
+      .select("question_id, acertou, created_at")
       .eq("user_id", uid)
 
     if (!data) return
@@ -113,8 +115,8 @@ export default function DesempenhoPage() {
     for (let i = 6; i >= 0; i--) {
       const dia = new Date(hoje)
       dia.setDate(hoje.getDate() - i)
-      const dateStr = dia.toISOString().split("T")[0]
-      const doDia = data.filter(q => q.created_at.startsWith(dateStr))
+      const dateStr = dia.toLocaleDateString("en-CA")
+      const doDia = data.filter(q => new Date(q.created_at).toLocaleDateString("en-CA") === dateStr)
       semana.push({
         dia: dias[dia.getDay()],
         questoes: doDia.length,
@@ -122,25 +124,51 @@ export default function DesempenhoPage() {
       })
     }
     setWeeklyData(semana)
+
+    if (data.length === 0) return
+
+    const qIds = [...new Set(data.map(q => q.question_id))]
+    const { data: questions } = await supabase
+      .from("questions")
+      .select("id, subject_id")
+      .in("id", qIds)
+
+    const subjectIds = [...new Set((questions ?? []).map(q => q.subject_id).filter(Boolean))]
+    const { data: subjects } = await supabase
+      .from("subjects")
+      .select("id, name")
+      .in("id", subjectIds.length > 0 ? subjectIds : ["null"])
+
+    const subjectMap = Object.fromEntries((subjects ?? []).map(s => [s.id, s.name]))
+    const qSubMap = Object.fromEntries((questions ?? []).map(q => [q.id, q.subject_id]))
+
+    const materiaStats: Record<string, { acertos: number; total: number; name: string }> = {}
+    for (const attempt of data) {
+      const sid = qSubMap[attempt.question_id]
+      if (!sid) continue
+      if (!materiaStats[sid]) materiaStats[sid] = { acertos: 0, total: 0, name: subjectMap[sid] ?? "Desconhecida" }
+      materiaStats[sid].total += 1
+      if (attempt.acertou) materiaStats[sid].acertos += 1
+    }
+
+    setDesempenhoPorMateria(
+      Object.entries(materiaStats).map(([subject_id, v]) => ({
+        subject_id,
+        name: v.name,
+        acerto: v.total > 0 ? parseFloat(((v.acertos / v.total) * 100).toFixed(1)) : 0,
+        questoes: v.total,
+      })).sort((a, b) => a.acerto - b.acerto)
+    )
   }
 
   async function fetchDesempenho(uid: string) {
-    const { data: desempenho } = await supabase
-      .from("desempenho_materia")
-      .select("subject_id, total, acertos, taxa_acerto")
-      .eq("user_id", uid)
-
     const { data: risco } = await supabase
       .from("materias_risco")
       .select("subject_id, taxa")
       .eq("user_id", uid)
       .order("taxa", { ascending: true })
 
-    const subjectIds = [...new Set([
-      ...(desempenho ?? []).map(d => d.subject_id),
-      ...(risco ?? []).map(r => r.subject_id),
-    ])]
-
+    const subjectIds = [...new Set((risco ?? []).map(r => r.subject_id))]
     const { data: subjects } = await supabase
       .from("subjects")
       .select("id, name")
@@ -148,36 +176,14 @@ export default function DesempenhoPage() {
 
     const subjectMap = Object.fromEntries((subjects ?? []).map(s => [s.id, s.name]))
 
-    // Agrupa por subject_id antes de renderizar
-    const agrupado: Record<string, { total: number; acertos: number; name: string }> = {}
-
-      ; (desempenho ?? []).forEach(d => {
-        if (!agrupado[d.subject_id]) {
-          agrupado[d.subject_id] = { total: 0, acertos: 0, name: subjectMap[d.subject_id] ?? "Desconhecida" }
-        }
-        agrupado[d.subject_id].total += d.total
-        agrupado[d.subject_id].acertos += d.acertos
-      })
-
-    setDesempenhoPorMateria(
-      Object.entries(agrupado).map(([subject_id, v]) => ({
-        subject_id,
-        name: v.name,
-        acerto: v.total > 0 ? parseFloat(((v.acertos / v.total) * 100).toFixed(1)) : 0,
-        questoes: v.total,
-      })).sort((a, b) => a.acerto - b.acerto)
-    )
-
-    // Agrupa materias_risco por subject_id
     const riscoAgrupado: Record<string, { soma: number; count: number; name: string }> = {}
-
-      ; (risco ?? []).forEach(r => {
-        if (!riscoAgrupado[r.subject_id]) {
-          riscoAgrupado[r.subject_id] = { soma: 0, count: 0, name: subjectMap[r.subject_id] ?? "Desconhecida" }
-        }
-        riscoAgrupado[r.subject_id].soma += Number(r.taxa)
-        riscoAgrupado[r.subject_id].count++
-      })
+    ;(risco ?? []).forEach(r => {
+      if (!riscoAgrupado[r.subject_id]) {
+        riscoAgrupado[r.subject_id] = { soma: 0, count: 0, name: subjectMap[r.subject_id] ?? "Desconhecida" }
+      }
+      riscoAgrupado[r.subject_id].soma += Number(r.taxa)
+      riscoAgrupado[r.subject_id].count++
+    })
 
     setMateriasRisco(
       Object.entries(riscoAgrupado).map(([subject_id, v]) => ({
@@ -309,7 +315,7 @@ export default function DesempenhoPage() {
                           <span className="font-medium text-foreground">{m.name}</span>
                           <span className="text-sm font-medium text-foreground">{m.taxa}%</span>
                         </div>
-                        <Progress value={m.taxa} className={`mt-1 h-2 ${m.taxa < 60 ? "[&>div]:bg-destructive" : m.taxa < 70 ? "[&>div]:bg-warning" : ""}`} />
+                        <Progress value={m.taxa} className={`mt-1 h-2 ${m.taxa < 55 ? "[&>div]:bg-destructive" : m.taxa < 70 ? "[&>div]:bg-warning" : ""}`} />
                       </div>
                     </div>
                   ))}
