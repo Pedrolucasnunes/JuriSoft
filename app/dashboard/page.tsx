@@ -3,15 +3,13 @@
 import { toast } from "sonner"
 import { SkeletonDashboard } from "@/components/ui/skeleton-cards"
 import { useEffect, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { TrendingUp, TrendingDown, Target, FileText, CheckCircle2, AlertTriangle, ArrowRight, List, Clock } from "lucide-react"
+import { TrendingDown, Target, FileText, CheckCircle2, AlertTriangle, ArrowRight, Clock } from "lucide-react"
 import Link from "next/link"
-import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid } from "recharts"
 import { supabase } from "@/lib/supabase"
 
 // ── Helpers taxa de acerto ───────────────────────────────────────
@@ -193,16 +191,14 @@ export default function DashboardPage() {
   const sim  = ac?.proximoSimulado
   const ins  = ac?.insightMateria
 
-  // Dados para o novo componente de disciplinas
-  const disciplinas = data?.desempenhoPorMateria ?? []
-  const sortedAsc = [...disciplinas].sort((a, b) => Number(a.taxa_acerto) - Number(b.taxa_acerto))
-  const sortedDesc = [...disciplinas].sort((a, b) => Number(b.taxa_acerto) - Number(a.taxa_acerto))
-  const emRisco = sortedAsc.slice(0, 5)
-  const melhores = sortedDesc.slice(0, 5)
+  // Usa a mesma fonte que o card de Recomendação: materias_risco VIEW (já ordenada e limitada a 5 pela API)
+  // Isso garante que a disciplina sugerida no insight sempre aparece na lista abaixo.
+  const emRisco = (data?.materiasRisco ?? []).map(m => ({ ...m, taxa_acerto: m.taxa }))
 
   const metaAcerto = 60
   const taxaGeral = data?.resumo?.taxaGeralAcerto ?? 0
   const numRisco = data?.materiasRisco?.length ?? 0
+  const isNewUser = !data?.ultimoSimulado && (data?.resumo?.totalRespondidas ?? 0) === 0
 
   return (
     <div className="space-y-6">
@@ -219,8 +215,45 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* ── Banner de alerta ── */}
-      {numRisco > 0 && (
+      {/* ── Banner: onboarding ou alerta de risco ── */}
+      {isNewUser ? (
+        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+          <div>
+            <p className="font-semibold text-foreground">
+              {userName ? `${getSaudacao()}, ${userName}! ` : ""}Bem-vindo ao AprovaOAB.
+            </p>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Siga estes 3 passos para começar seu estudo de forma inteligente.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</span>
+              <div>
+                <p className="text-sm font-medium text-foreground">Faça um simulado</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Identifica seu nível atual e as disciplinas críticas.</p>
+                <Link href="/dashboard/simulados" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                  Iniciar agora <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 rounded-lg border border-border p-3 opacity-60">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">2</span>
+              <div>
+                <p className="text-sm font-medium text-foreground">Gere sua agenda</p>
+                <p className="text-xs text-muted-foreground mt-0.5">A IA monta um calendário de estudos personalizado.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 rounded-lg border border-border p-3 opacity-60">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">3</span>
+              <div>
+                <p className="text-sm font-medium text-foreground">Treine estrategicamente</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Questões priorizadas pelo seu ponto fraco.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : numRisco > 0 ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-primary/30 bg-primary/10 px-4 py-3">
           <p className="text-sm text-foreground">
             {userName ? <><span className="font-semibold">{getSaudacao()}, {userName}.</span> </> : ""}
@@ -231,7 +264,7 @@ export default function DashboardPage() {
             <Link href="/dashboard/treino">Treinar agora</Link>
           </Button>
         </div>
-      )}
+      ) : null}
 
       {/* ── Stats cards ── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -265,14 +298,17 @@ export default function DashboardPage() {
           <CardContent>
             <span className="text-2xl font-bold text-foreground">{taxaGeral}%</span>
             <div className="mt-2 space-y-1">
-              <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>Atual</span>
-                <span>meta: {metaAcerto}%</span>
+              <div className="relative">
+                <Progress value={taxaGeral} className="h-2" />
+                {/* Marcador da meta — linha vertical em exatamente metaAcerto% da largura */}
+                <div
+                  className="absolute top-0 h-full w-px bg-foreground/50"
+                  style={{ left: `${metaAcerto}%` }}
+                />
               </div>
-              <Progress value={taxaGeral} className="h-1.5" />
               <div className="flex justify-between text-[10px] text-muted-foreground">
                 <span>0%</span>
-                <span>{metaAcerto}%</span>
+                <span>meta: {metaAcerto}%</span>
                 <span>100%</span>
               </div>
             </div>
@@ -302,142 +338,6 @@ export default function DashboardPage() {
           <CardContent>
             <span className="text-2xl font-bold text-foreground">{numRisco}</span>
             <p className="mt-1 text-xs text-muted-foreground">Precisam de atenção</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── Gráficos ── */}
-      <div className="grid gap-6 lg:grid-cols-2">
-
-        {/* Evolução do Desempenho */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Evolução do Desempenho</CardTitle>
-            <CardDescription>Sua nota nos simulados ao longo do tempo</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {(data?.evolucao?.length ?? 0) === 0 ? (
-              <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
-                Faça mais simulados para ver sua curva de progresso
-              </div>
-            ) : (data?.evolucao?.length ?? 0) === 1 ? (
-              <div className="space-y-2">
-                <div className="h-[260px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={data!.evolucao}>
-                      <defs>
-                        <linearGradient id="colorNota" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
-                      <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" domain={[0, 100]} />
-                      <RechartsTooltip
-                        contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
-                        labelStyle={{ color: "hsl(var(--foreground))" }}
-                        formatter={(value: number) => [`${value}%`, "Aproveitamento"]}
-                      />
-                      <Area type="monotone" dataKey="nota" stroke="var(--chart-1)" strokeWidth={2} fillOpacity={1} fill="url(#colorNota)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                <p className="text-center text-xs text-muted-foreground">1 simulado realizado — continue para ver sua evolução</p>
-              </div>
-            ) : (
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data!.evolucao}>
-                    <defs>
-                      <linearGradient id="colorNota" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
-                    <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" domain={[0, 100]} />
-                    <RechartsTooltip
-                      contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
-                      labelStyle={{ color: "hsl(var(--foreground))" }}
-                      formatter={(value: number) => [`${value}%`, "Aproveitamento"]}
-                    />
-                    <Area type="monotone" dataKey="nota" stroke="var(--chart-1)" strokeWidth={2} fillOpacity={1} fill="url(#colorNota)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Taxa de Acerto por Disciplina — novo */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Taxa de Acerto por Disciplina</CardTitle>
-            <CardDescription>Seu desempenho em cada área do conhecimento</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {disciplinas.length === 0 ? (
-              <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm text-center px-4">
-                Faça seu primeiro simulado para ver seu desempenho por disciplina
-              </div>
-            ) : (
-              <Tabs defaultValue="risco">
-                <TabsList className="w-full mb-4">
-                  <TabsTrigger value="risco" className="flex-1 gap-1.5">
-                    <TrendingDown className="h-3.5 w-3.5" />
-                    Em risco
-                    <Badge variant="secondary" className="ml-1 text-xs px-1.5">{emRisco.length}</Badge>
-                  </TabsTrigger>
-                  <TabsTrigger value="melhores" className="flex-1 gap-1.5">
-                    <TrendingUp className="h-3.5 w-3.5" />
-                    Melhores
-                    <Badge variant="secondary" className="ml-1 text-xs px-1.5">{melhores.length}</Badge>
-                  </TabsTrigger>
-                  <TabsTrigger value="todas" className="flex-1 gap-1.5">
-                    <List className="h-3.5 w-3.5" />
-                    Todas
-                    <Badge variant="secondary" className="ml-1 text-xs px-1.5">{disciplinas.length}</Badge>
-                  </TabsTrigger>
-                </TabsList>
-
-                {/* Em risco */}
-                <TabsContent value="risco" className="space-y-4 mt-0">
-                  <p className="text-xs text-muted-foreground">As 5 disciplinas com menor aproveitamento — foque aqui primeiro.</p>
-                  <div className="space-y-4">
-                    {emRisco.map((item, i) => (
-                      <DisciplinaRow key={item.subject_id} item={item} index={i} showBadge />
-                    ))}
-                  </div>
-                  <Legenda />
-                </TabsContent>
-
-                {/* Melhores */}
-                <TabsContent value="melhores" className="space-y-4 mt-0">
-                  <p className="text-xs text-muted-foreground">As 5 disciplinas com melhor aproveitamento.</p>
-                  <div className="space-y-4">
-                    {melhores.map((item, i) => (
-                      <DisciplinaRow key={item.subject_id} item={item} index={i} />
-                    ))}
-                  </div>
-                  <Legenda />
-                </TabsContent>
-
-                {/* Todas */}
-                <TabsContent value="todas" className="mt-0">
-                  <p className="text-xs text-muted-foreground mb-4">Todas as disciplinas do pior para o melhor aproveitamento.</p>
-                  <div className="space-y-4 max-h-[280px] overflow-y-auto pr-1">
-                    {sortedAsc.map((item, i) => (
-                      <DisciplinaRow key={item.subject_id} item={item} index={i} />
-                    ))}
-                  </div>
-                  <div className="border-t border-border mt-3 pt-3">
-                    <Legenda />
-                  </div>
-                </TabsContent>
-              </Tabs>
-            )}
           </CardContent>
         </Card>
       </div>
@@ -521,11 +421,11 @@ export default function DashboardPage() {
         <Card className="flex flex-col">
           <CardContent className="pt-5 pb-4 flex flex-col h-full gap-3">
             <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-xs font-medium text-blue-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-                IA sugere
+              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                Recomendação
               </span>
-              <span className="text-xs text-muted-foreground">Insight</span>
+              <span className="text-xs text-muted-foreground">Baseado no seu histórico</span>
             </div>
             {ins ? (
               <div>
@@ -559,6 +459,35 @@ export default function DashboardPage() {
         </Card>
 
       </div>
+
+      {/* ── Disciplinas em risco ── */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-destructive" />
+              Disciplinas em risco
+            </CardTitle>
+          </div>
+          <Link href="/dashboard/desempenho" className="text-xs text-primary hover:underline flex items-center gap-1">
+            Ver análise completa <ArrowRight className="h-3 w-3" />
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {emRisco.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              Faça seu primeiro simulado para ver seu desempenho por disciplina
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {emRisco.map((item, i) => (
+                <DisciplinaRow key={item.subject_id} item={item} index={i} showBadge />
+              ))}
+              <Legenda />
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
     </div>
   )

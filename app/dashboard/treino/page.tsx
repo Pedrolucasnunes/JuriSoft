@@ -209,6 +209,10 @@ export default function TreinoPage() {
       { letra: "D", texto: questao.alternativa_d },
     ]
 
+    // Só permite voltar se a questão anterior ainda não foi verificada.
+    // Evita o estado confuso onde o usuário volta mas não pode interagir com nada.
+    const prevJaVerificada = currentQuestion > 0 && !!respostas[treinoAtivo.questoes[currentQuestion - 1].id]
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -294,7 +298,8 @@ export default function TreinoPage() {
               <Button
                 variant="outline"
                 onClick={() => setCurrentQuestion((p) => p - 1)}
-                disabled={currentQuestion === 0}
+                disabled={currentQuestion === 0 || prevJaVerificada}
+                title={prevJaVerificada ? "Questão anterior já respondida" : undefined}
               >
                 <ChevronLeft className="mr-2 h-4 w-4" /> Anterior
               </Button>
