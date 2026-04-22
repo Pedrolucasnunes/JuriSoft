@@ -3,25 +3,29 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { TrendingUp, TrendingDown, Target, BookOpen, Zap, Loader2, AlertCircle, Award, CheckCircle2, XCircle } from "lucide-react"
+import { TrendingUp, TrendingDown, Target, BookOpen, Trophy, Loader2, AlertCircle, Award, CheckCircle2, XCircle } from "lucide-react"
 import {
   Area, AreaChart, Bar, BarChart, ResponsiveContainer,
-  XAxis, YAxis, Tooltip, CartesianGrid, Legend,
+  XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, Legend,
 } from "recharts"
 import { supabase } from "@/lib/supabase"
+
+const META = 50
+const LISTA_LIMITE = 6
 
 interface EvolutionPoint {
   date: string
   nota: number
-  meta: number
 }
 
 interface WeeklyPoint {
   dia: string
   questoes: number
   acertos: number
+  erros: number
 }
 
 interface DesempenhoMateria {
@@ -38,15 +42,15 @@ interface MateriaRisco {
 }
 
 function getRiskColor(taxa: number) {
-  if (taxa < 55) return "bg-destructive text-destructive-foreground"
-  if (taxa < 70) return "bg-warning text-warning-foreground"
+  if (taxa <= 25) return "bg-destructive text-destructive-foreground"
+  if (taxa < META) return "bg-amber-500 text-white"
   return "bg-primary text-primary-foreground"
 }
 
 function getRiskLabel(taxa: number) {
-  if (taxa < 55) return "alto"
-  if (taxa < 70) return "médio"
-  return "baixo"
+  if (taxa <= 25) return "crítico"
+  if (taxa < META) return "atenção"
+  return "adequado"
 }
 
 export default function DesempenhoPage() {
@@ -63,22 +67,16 @@ export default function DesempenhoPage() {
   const [weeklyData, setWeeklyData] = useState<WeeklyPoint[]>([])
   const [desempenhoPorMateria, setDesempenhoPorMateria] = useState<DesempenhoMateria[]>([])
   const [materiasRisco, setMateriasRisco] = useState<MateriaRisco[]>([])
+  const [showAllRisco, setShowAllRisco] = useState(false)
+  const [showAllDisciplinas, setShowAllDisciplinas] = useState(false)
 
   useEffect(() => {
     async function init() {
       try {
         const { data: { user }, error: authError } = await supabase.auth.getUser()
         if (authError) throw authError
-        if (!user) {
-          setError("Usuário não autenticado.")
-          return
-        }
-
-        await Promise.all([
-          fetchSimulados(user.id),
-          fetchQuestoes(user.id),
-          fetchDesempenho(user.id),
-        ])
+        if (!user) { setError("Usuário não autenticado."); return }
+        await Promise.all([fetchSimulados(user.id), fetchQuestoes(user.id), fetchDesempenho(user.id)])
       } catch (err) {
         console.error("Erro ao carregar desempenho:", err)
         setError("Não foi possível carregar os dados. Tente novamente.")
@@ -102,7 +100,7 @@ export default function DesempenhoPage() {
 
     const media = data.reduce((acc, s) => acc + s.percentual, 0) / data.length
     const melhor = data.reduce((prev, curr) => curr.percentual > prev.percentual ? curr : prev, data[0])
-    const aprovados = data.filter(s => s.percentual >= 60).length
+    const aprovados = data.filter(s => s.percentual >= META).length
 
     setStatsSimulados({
       mediaAcerto: parseFloat(media.toFixed(1)),
@@ -126,7 +124,6 @@ export default function DesempenhoPage() {
     setEvolutionData(Object.entries(porMes).map(([, v]) => ({
       date: v.label,
       nota: parseFloat((v.soma / v.count).toFixed(1)),
-      meta: 60,
     })))
   }
 
@@ -154,10 +151,12 @@ export default function DesempenhoPage() {
       dia.setDate(hoje.getDate() - i)
       const dateStr = dia.toLocaleDateString("en-CA")
       const doDia = data.filter(q => new Date(q.created_at).toLocaleDateString("en-CA") === dateStr)
+      const acertosDia = doDia.filter(q => q.acertou).length
       semana.push({
         dia: dias[dia.getDay()],
         questoes: doDia.length,
-        acertos: doDia.filter(q => q.acertou).length,
+        acertos: acertosDia,
+        erros: doDia.length - acertosDia,
       })
     }
     setWeeklyData(semana)
@@ -166,18 +165,12 @@ export default function DesempenhoPage() {
 
     const qIds = [...new Set(data.map(q => q.question_id))]
     const { data: questions, error: qError } = await supabase
-      .from("questions")
-      .select("id, subject_id")
-      .in("id", qIds)
-
+      .from("questions").select("id, subject_id").in("id", qIds)
     if (qError) throw qError
 
     const subjectIds = [...new Set((questions ?? []).map(q => q.subject_id).filter(Boolean))]
     const { data: subjects, error: sError } = await supabase
-      .from("subjects")
-      .select("id, name")
-      .in("id", subjectIds.length > 0 ? subjectIds : ["null"])
-
+      .from("subjects").select("id, name").in("id", subjectIds.length > 0 ? subjectIds : ["null"])
     if (sError) throw sError
 
     const subjectMap = Object.fromEntries((subjects ?? []).map(s => [s.id, s.name]))
@@ -204,37 +197,24 @@ export default function DesempenhoPage() {
 
   async function fetchDesempenho(uid: string) {
     const { data: attempts, error: aError } = await supabase
-      .from("simulado_attempts")
-      .select("id")
-      .eq("user_id", uid)
-
+      .from("simulado_attempts").select("id").eq("user_id", uid)
     if (aError) throw aError
     if (!attempts || attempts.length === 0) return
 
-    const attemptIds = attempts.map(a => a.id)
-
     const { data: respostas, error: rError } = await supabase
-      .from("simulado_respostas")
-      .select("question_id, acertou")
-      .in("attempt_id", attemptIds)
-
+      .from("simulado_respostas").select("question_id, acertou")
+      .in("attempt_id", attempts.map(a => a.id))
     if (rError) throw rError
     if (!respostas || respostas.length === 0) return
 
     const qIds = [...new Set(respostas.map(r => r.question_id))]
     const { data: questions, error: qError } = await supabase
-      .from("questions")
-      .select("id, subject_id")
-      .in("id", qIds)
-
+      .from("questions").select("id, subject_id").in("id", qIds)
     if (qError) throw qError
 
     const subjectIds = [...new Set((questions ?? []).map(q => q.subject_id).filter(Boolean))]
     const { data: subjects, error: sError } = await supabase
-      .from("subjects")
-      .select("id, name")
-      .in("id", subjectIds.length > 0 ? subjectIds : ["null"])
-
+      .from("subjects").select("id, name").in("id", subjectIds.length > 0 ? subjectIds : ["null"])
     if (sError) throw sError
 
     const subjectMap = Object.fromEntries((subjects ?? []).map(s => [s.id, s.name]))
@@ -281,6 +261,11 @@ export default function DesempenhoPage() {
     )
   }
 
+  const riscosVisiveis = showAllRisco ? materiasRisco : materiasRisco.slice(0, LISTA_LIMITE)
+  const disciplinasVisiveis = showAllDisciplinas ? desempenhoPorMateria : desempenhoPorMateria.slice(0, LISTA_LIMITE)
+  const abaixoDaMetaRisco = materiasRisco.filter(m => m.taxa < META).length
+  const abaixoDaMetaDisciplinas = desempenhoPorMateria.filter(d => d.acerto < META).length
+
   return (
     <div className="space-y-6">
       <div>
@@ -294,23 +279,30 @@ export default function DesempenhoPage() {
           <TabsTrigger value="questoes">Questões</TabsTrigger>
         </TabsList>
 
+        {/* ─── ABA SIMULADOS ─── */}
         <TabsContent value="simulados" className="mt-6 space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Média de Acertos</CardTitle>
                 <Target className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-2">
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-bold text-foreground">{statsSimulados.mediaAcerto}%</span>
-                  <span className={`flex items-center text-xs font-medium ${statsSimulados.mediaAcerto >= 60 ? "text-primary" : "text-destructive"}`}>
-                    {statsSimulados.mediaAcerto >= 60 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
+                  <span className={`flex items-center text-xs font-medium ${statsSimulados.mediaAcerto >= META ? "text-primary" : "text-destructive"}`}>
+                    {statsSimulados.mediaAcerto >= META
+                      ? <><TrendingUp className="mr-1 h-3 w-3" />acima da meta</>
+                      : <><TrendingDown className="mr-1 h-3 w-3" />abaixo da meta</>
+                    }
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">Meta: 60% para aprovação</p>
+                <Progress value={statsSimulados.mediaAcerto} className="h-1.5" />
+                <p className="text-xs text-muted-foreground">Meta: {META}% para aprovação</p>
               </CardContent>
             </Card>
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Simulados Realizados</CardTitle>
@@ -318,13 +310,14 @@ export default function DesempenhoPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-foreground">{statsSimulados.totalSimulados}</div>
-                <p className="mt-1 text-xs text-muted-foreground">{statsSimulados.aprovados} acima de 60%</p>
+                <p className="mt-1 text-xs text-muted-foreground">{statsSimulados.aprovados} acima de {META}%</p>
               </CardContent>
             </Card>
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Maior Nota</CardTitle>
-                <Zap className="h-4 w-4 text-muted-foreground" />
+                <Trophy className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-foreground">
@@ -335,20 +328,30 @@ export default function DesempenhoPage() {
                 </p>
               </CardContent>
             </Card>
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Taxa de Aprovação</CardTitle>
                 <Award className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-2">
                 <div className="text-2xl font-bold text-foreground">
-                  {statsSimulados.totalSimulados > 0 ? Math.round((statsSimulados.aprovados / statsSimulados.totalSimulados) * 100) : 0}%
+                  {statsSimulados.totalSimulados > 0
+                    ? Math.round((statsSimulados.aprovados / statsSimulados.totalSimulados) * 100)
+                    : 0}%
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">{statsSimulados.aprovados} de {statsSimulados.totalSimulados} simulados</p>
+                <Progress
+                  value={statsSimulados.totalSimulados > 0
+                    ? (statsSimulados.aprovados / statsSimulados.totalSimulados) * 100
+                    : 0}
+                  className="h-1.5"
+                />
+                <p className="text-xs text-muted-foreground">{statsSimulados.aprovados} de {statsSimulados.totalSimulados} simulados</p>
               </CardContent>
             </Card>
           </div>
 
+          {/* Evolução das Notas */}
           <Card>
             <CardHeader>
               <CardTitle>Evolução das Notas</CardTitle>
@@ -356,7 +359,10 @@ export default function DesempenhoPage() {
             </CardHeader>
             <CardContent>
               {evolutionData.length === 0 ? (
-                <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">Realize simulados para ver sua evolução</div>
+                <div className="flex flex-col items-center justify-center h-[300px] gap-3 text-muted-foreground">
+                  <BookOpen className="h-8 w-8 opacity-40" />
+                  <p className="text-sm">Realize simulados para ver sua evolução</p>
+                </div>
               ) : (
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
@@ -370,9 +376,18 @@ export default function DesempenhoPage() {
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                       <XAxis dataKey="date" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
                       <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" domain={[0, 100]} />
-                      <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} labelStyle={{ color: "hsl(var(--foreground))" }} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
+                        labelStyle={{ color: "hsl(var(--foreground))" }}
+                        formatter={(value) => [`${value}%`, "Nota"]}
+                      />
+                      <ReferenceLine
+                        y={META}
+                        stroke="hsl(var(--muted-foreground))"
+                        strokeDasharray="5 5"
+                        label={{ value: `Meta ${META}%`, position: "insideTopRight", fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                      />
                       <Area type="monotone" dataKey="nota" stroke="var(--chart-1)" strokeWidth={2} fillOpacity={1} fill="url(#colorNota2)" name="Nota" />
-                      <Area type="monotone" dataKey="meta" stroke="hsl(var(--muted-foreground))" strokeWidth={1} strokeDasharray="5 5" fillOpacity={0} name="Meta (60%)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -380,17 +395,28 @@ export default function DesempenhoPage() {
             </CardContent>
           </Card>
 
+          {/* Disciplinas em Risco */}
           <Card>
             <CardHeader>
-              <CardTitle>Índice de Risco de Reprovação</CardTitle>
-              <CardDescription>Análise por disciplina baseada no seu desempenho</CardDescription>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <CardTitle>Disciplinas em Risco</CardTitle>
+                  <CardDescription>Análise por disciplina baseada no seu desempenho em simulados</CardDescription>
+                </div>
+                {abaixoDaMetaRisco > 0 && (
+                  <Badge variant="destructive" className="shrink-0">{abaixoDaMetaRisco} abaixo de {META}%</Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {materiasRisco.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Realize simulados para ver sua análise de risco por disciplina.</p>
+                <div className="flex flex-col items-center justify-center py-8 gap-3 text-muted-foreground">
+                  <Target className="h-8 w-8 opacity-40" />
+                  <p className="text-sm">Realize simulados para ver a análise de risco por disciplina.</p>
+                </div>
               ) : (
                 <div className="space-y-3">
-                  {materiasRisco.map((m, i) => (
+                  {riscosVisiveis.map((m, i) => (
                     <div key={`${m.subject_id}-${i}`} className="flex items-center gap-4 rounded-lg border border-border p-3">
                       <Badge className={getRiskColor(m.taxa)}>{getRiskLabel(m.taxa)}</Badge>
                       <div className="flex-1">
@@ -398,18 +424,28 @@ export default function DesempenhoPage() {
                           <span className="font-medium text-foreground">{m.name}</span>
                           <span className="text-sm font-medium text-foreground">{m.taxa}%</span>
                         </div>
-                        <Progress value={m.taxa} className={`mt-1 h-2 ${m.taxa < 55 ? "[&>div]:bg-destructive" : m.taxa < 70 ? "[&>div]:bg-warning" : ""}`} />
+                        <Progress
+                          value={m.taxa}
+                          className={`mt-1 h-2 ${m.taxa <= 25 ? "[&>div]:bg-destructive" : m.taxa < META ? "[&>div]:bg-amber-500" : ""}`}
+                        />
                       </div>
                     </div>
                   ))}
+                  {materiasRisco.length > LISTA_LIMITE && (
+                    <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setShowAllRisco(v => !v)}>
+                      {showAllRisco ? "Mostrar menos" : `Ver mais ${materiasRisco.length - LISTA_LIMITE} disciplinas`}
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* ─── ABA QUESTÕES ─── */}
         <TabsContent value="questoes" className="mt-6 space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Total Resolvidas</CardTitle>
@@ -417,24 +453,30 @@ export default function DesempenhoPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-foreground">{statsQuestoes.total.toLocaleString("pt-BR")}</div>
-                <p className="mt-1 text-xs text-muted-foreground">{statsQuestoes.acertos} acertos / {statsQuestoes.erros} erros</p>
+                <p className="mt-1 text-xs text-muted-foreground">{statsQuestoes.acertos} acertos · {statsQuestoes.erros} erros</p>
               </CardContent>
             </Card>
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Taxa de Acerto</CardTitle>
                 <Target className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-2">
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-bold text-foreground">{statsQuestoes.taxaAcerto}%</span>
-                  <span className={`flex items-center text-xs font-medium ${statsQuestoes.taxaAcerto >= 60 ? "text-primary" : "text-destructive"}`}>
-                    {statsQuestoes.taxaAcerto >= 60 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
+                  <span className={`flex items-center text-xs font-medium ${statsQuestoes.taxaAcerto >= META ? "text-primary" : "text-destructive"}`}>
+                    {statsQuestoes.taxaAcerto >= META
+                      ? <><TrendingUp className="mr-1 h-3 w-3" />acima da meta</>
+                      : <><TrendingDown className="mr-1 h-3 w-3" />abaixo da meta</>
+                    }
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">Taxa geral acumulada</p>
+                <Progress value={statsQuestoes.taxaAcerto} className="h-1.5" />
+                <p className="text-xs text-muted-foreground">Meta: {META}% para aprovação</p>
               </CardContent>
             </Card>
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Acertos</CardTitle>
@@ -442,9 +484,14 @@ export default function DesempenhoPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-foreground">{statsQuestoes.acertos.toLocaleString("pt-BR")}</div>
-                <p className="mt-1 text-xs text-muted-foreground">Total de acertos</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {statsQuestoes.total > 0
+                    ? `${((statsQuestoes.acertos / statsQuestoes.total) * 100).toFixed(1)}% do total respondido`
+                    : "Nenhuma questão respondida"}
+                </p>
               </CardContent>
             </Card>
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Erros</CardTitle>
@@ -452,19 +499,27 @@ export default function DesempenhoPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-destructive">{statsQuestoes.erros.toLocaleString("pt-BR")}</div>
-                <p className="mt-1 text-xs text-muted-foreground">Total de erros</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {statsQuestoes.total > 0
+                    ? `${((statsQuestoes.erros / statsQuestoes.total) * 100).toFixed(1)}% do total respondido`
+                    : "Nenhuma questão respondida"}
+                </p>
               </CardContent>
             </Card>
           </div>
 
+          {/* Atividade Semanal */}
           <Card>
             <CardHeader>
               <CardTitle>Atividade Semanal</CardTitle>
-              <CardDescription>Questões respondidas nos últimos 7 dias</CardDescription>
+              <CardDescription>Acertos e erros nos últimos 7 dias</CardDescription>
             </CardHeader>
             <CardContent>
               {weeklyData.every(d => d.questoes === 0) ? (
-                <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">Nenhuma atividade nos últimos 7 dias</div>
+                <div className="flex flex-col items-center justify-center h-[300px] gap-3 text-muted-foreground">
+                  <BookOpen className="h-8 w-8 opacity-40" />
+                  <p className="text-sm">Nenhuma atividade nos últimos 7 dias</p>
+                </div>
               ) : (
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
@@ -472,10 +527,13 @@ export default function DesempenhoPage() {
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
                       <XAxis dataKey="dia" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
                       <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
-                      <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} labelStyle={{ color: "hsl(var(--foreground))" }} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
+                        labelStyle={{ color: "hsl(var(--foreground))" }}
+                      />
                       <Legend />
-                      <Bar dataKey="questoes" fill="var(--chart-2)" name="Total" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="acertos" fill="var(--chart-1)" name="Acertos" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="acertos" fill="var(--chart-1)" name="Acertos" stackId="a" />
+                      <Bar dataKey="erros" fill="var(--chart-2)" name="Erros" stackId="a" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -483,25 +541,46 @@ export default function DesempenhoPage() {
             </CardContent>
           </Card>
 
+          {/* Desempenho por Disciplina */}
           <Card>
             <CardHeader>
-              <CardTitle>Desempenho por Disciplina</CardTitle>
-              <CardDescription>Taxa de acerto em questões avulsas</CardDescription>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <CardTitle>Desempenho por Disciplina</CardTitle>
+                  <CardDescription>Taxa de acerto em questões avulsas</CardDescription>
+                </div>
+                {abaixoDaMetaDisciplinas > 0 && (
+                  <Badge variant="destructive" className="shrink-0">{abaixoDaMetaDisciplinas} abaixo de {META}%</Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {desempenhoPorMateria.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Responda questões para ver seu desempenho por disciplina.</p>
+                <div className="flex flex-col items-center justify-center py-8 gap-3 text-muted-foreground">
+                  <BookOpen className="h-8 w-8 opacity-40" />
+                  <p className="text-sm">Responda questões para ver seu desempenho por disciplina.</p>
+                </div>
               ) : (
                 <div className="space-y-3">
-                  {desempenhoPorMateria.map((d, i) => (
+                  {disciplinasVisiveis.map((d, i) => (
                     <div key={`${d.subject_id}-${i}`} className="space-y-1">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-foreground">{d.name}</span>
-                        <span className="text-muted-foreground">{d.acerto}% ({d.questoes} questões)</span>
+                        <span className="text-muted-foreground">
+                          {d.acerto}% <span className="text-xs">({d.questoes} questões)</span>
+                        </span>
                       </div>
-                      <Progress value={d.acerto} className={`h-2 ${d.acerto < 60 ? "[&>div]:bg-destructive" : d.acerto < 70 ? "[&>div]:bg-warning" : ""}`} />
+                      <Progress
+                        value={d.acerto}
+                        className={`h-2 ${d.acerto <= 25 ? "[&>div]:bg-destructive" : d.acerto < META ? "[&>div]:bg-amber-500" : ""}`}
+                      />
                     </div>
                   ))}
+                  {desempenhoPorMateria.length > LISTA_LIMITE && (
+                    <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setShowAllDisciplinas(v => !v)}>
+                      {showAllDisciplinas ? "Mostrar menos" : `Ver mais ${desempenhoPorMateria.length - LISTA_LIMITE} disciplinas`}
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>
