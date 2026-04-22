@@ -5,12 +5,37 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { TrendingUp, TrendingDown, Target, BookOpen, Zap, Loader2 } from "lucide-react"
+import { TrendingUp, TrendingDown, Target, BookOpen, Zap, Loader2, AlertCircle, Award, CheckCircle2, XCircle } from "lucide-react"
 import {
   Area, AreaChart, Bar, BarChart, ResponsiveContainer,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from "recharts"
 import { supabase } from "@/lib/supabase"
+
+interface EvolutionPoint {
+  date: string
+  nota: number
+  meta: number
+}
+
+interface WeeklyPoint {
+  dia: string
+  questoes: number
+  acertos: number
+}
+
+interface DesempenhoMateria {
+  subject_id: string
+  name: string
+  acerto: number
+  questoes: number
+}
+
+interface MateriaRisco {
+  subject_id: string
+  name: string
+  taxa: number
+}
 
 function getRiskColor(taxa: number) {
   if (taxa < 55) return "bg-destructive text-destructive-foreground"
@@ -26,42 +51,53 @@ function getRiskLabel(taxa: number) {
 
 export default function DesempenhoPage() {
   const [loading, setLoading] = useState(true)
-  const [evolutionData, setEvolutionData] = useState<any[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [evolutionData, setEvolutionData] = useState<EvolutionPoint[]>([])
   const [statsSimulados, setStatsSimulados] = useState({
     mediaAcerto: 0, totalSimulados: 0, aprovados: 0,
-    maiorNota: 0, maiorTotal: 80, maiorPercentual: 0,
+    maiorNota: 0, maiorTotal: 0, maiorPercentual: 0,
   })
   const [statsQuestoes, setStatsQuestoes] = useState({
     total: 0, acertos: 0, erros: 0, taxaAcerto: 0,
   })
-  const [weeklyData, setWeeklyData] = useState<any[]>([])
-  const [desempenhoPorMateria, setDesempenhoPorMateria] = useState<any[]>([])
-  const [materiasRisco, setMateriasRisco] = useState<any[]>([])
+  const [weeklyData, setWeeklyData] = useState<WeeklyPoint[]>([])
+  const [desempenhoPorMateria, setDesempenhoPorMateria] = useState<DesempenhoMateria[]>([])
+  const [materiasRisco, setMateriasRisco] = useState<MateriaRisco[]>([])
 
   useEffect(() => {
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        if (authError) throw authError
+        if (!user) {
+          setError("Usuário não autenticado.")
+          return
+        }
 
-      await Promise.all([
-        fetchSimulados(user.id),
-        fetchQuestoes(user.id),
-        fetchDesempenho(user.id),
-      ])
-
-      setLoading(false)
+        await Promise.all([
+          fetchSimulados(user.id),
+          fetchQuestoes(user.id),
+          fetchDesempenho(user.id),
+        ])
+      } catch (err) {
+        console.error("Erro ao carregar desempenho:", err)
+        setError("Não foi possível carregar os dados. Tente novamente.")
+      } finally {
+        setLoading(false)
+      }
     }
     init()
   }, [])
 
   async function fetchSimulados(uid: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("simulados")
       .select("id, acertos, erros, percentual, numero_questoes, created_at")
       .eq("user_id", uid)
       .not("percentual", "is", null)
       .order("created_at", { ascending: true })
 
+    if (error) throw error
     if (!data || data.length === 0) return
 
     const media = data.reduce((acc, s) => acc + s.percentual, 0) / data.length
@@ -95,11 +131,12 @@ export default function DesempenhoPage() {
   }
 
   async function fetchQuestoes(uid: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("question_attempts")
       .select("question_id, acertou, created_at")
       .eq("user_id", uid)
 
+    if (error) throw error
     if (!data) return
 
     const total = data.length
@@ -111,7 +148,7 @@ export default function DesempenhoPage() {
 
     const dias = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
     const hoje = new Date()
-    const semana = []
+    const semana: WeeklyPoint[] = []
     for (let i = 6; i >= 0; i--) {
       const dia = new Date(hoje)
       dia.setDate(hoje.getDate() - i)
@@ -128,16 +165,20 @@ export default function DesempenhoPage() {
     if (data.length === 0) return
 
     const qIds = [...new Set(data.map(q => q.question_id))]
-    const { data: questions } = await supabase
+    const { data: questions, error: qError } = await supabase
       .from("questions")
       .select("id, subject_id")
       .in("id", qIds)
 
+    if (qError) throw qError
+
     const subjectIds = [...new Set((questions ?? []).map(q => q.subject_id).filter(Boolean))]
-    const { data: subjects } = await supabase
+    const { data: subjects, error: sError } = await supabase
       .from("subjects")
       .select("id, name")
       .in("id", subjectIds.length > 0 ? subjectIds : ["null"])
+
+    if (sError) throw sError
 
     const subjectMap = Object.fromEntries((subjects ?? []).map(s => [s.id, s.name]))
     const qSubMap = Object.fromEntries((questions ?? []).map(q => [q.id, q.subject_id]))
@@ -162,34 +203,57 @@ export default function DesempenhoPage() {
   }
 
   async function fetchDesempenho(uid: string) {
-    const { data: risco } = await supabase
-      .from("materias_risco")
-      .select("subject_id, taxa")
+    const { data: attempts, error: aError } = await supabase
+      .from("simulado_attempts")
+      .select("id")
       .eq("user_id", uid)
-      .order("taxa", { ascending: true })
 
-    const subjectIds = [...new Set((risco ?? []).map(r => r.subject_id))]
-    const { data: subjects } = await supabase
+    if (aError) throw aError
+    if (!attempts || attempts.length === 0) return
+
+    const attemptIds = attempts.map(a => a.id)
+
+    const { data: respostas, error: rError } = await supabase
+      .from("simulado_respostas")
+      .select("question_id, acertou")
+      .in("attempt_id", attemptIds)
+
+    if (rError) throw rError
+    if (!respostas || respostas.length === 0) return
+
+    const qIds = [...new Set(respostas.map(r => r.question_id))]
+    const { data: questions, error: qError } = await supabase
+      .from("questions")
+      .select("id, subject_id")
+      .in("id", qIds)
+
+    if (qError) throw qError
+
+    const subjectIds = [...new Set((questions ?? []).map(q => q.subject_id).filter(Boolean))]
+    const { data: subjects, error: sError } = await supabase
       .from("subjects")
       .select("id, name")
       .in("id", subjectIds.length > 0 ? subjectIds : ["null"])
 
-    const subjectMap = Object.fromEntries((subjects ?? []).map(s => [s.id, s.name]))
+    if (sError) throw sError
 
-    const riscoAgrupado: Record<string, { soma: number; count: number; name: string }> = {}
-    ;(risco ?? []).forEach(r => {
-      if (!riscoAgrupado[r.subject_id]) {
-        riscoAgrupado[r.subject_id] = { soma: 0, count: 0, name: subjectMap[r.subject_id] ?? "Desconhecida" }
-      }
-      riscoAgrupado[r.subject_id].soma += Number(r.taxa)
-      riscoAgrupado[r.subject_id].count++
-    })
+    const subjectMap = Object.fromEntries((subjects ?? []).map(s => [s.id, s.name]))
+    const qSubMap = Object.fromEntries((questions ?? []).map(q => [q.id, q.subject_id]))
+
+    const materiaStats: Record<string, { acertos: number; total: number; name: string }> = {}
+    for (const resposta of respostas) {
+      const sid = qSubMap[resposta.question_id]
+      if (!sid) continue
+      if (!materiaStats[sid]) materiaStats[sid] = { acertos: 0, total: 0, name: subjectMap[sid] ?? "Desconhecida" }
+      materiaStats[sid].total += 1
+      if (resposta.acertou) materiaStats[sid].acertos += 1
+    }
 
     setMateriasRisco(
-      Object.entries(riscoAgrupado).map(([subject_id, v]) => ({
+      Object.entries(materiaStats).map(([subject_id, v]) => ({
         subject_id,
         name: v.name,
-        taxa: parseFloat((v.soma / v.count).toFixed(1)),
+        taxa: v.total > 0 ? parseFloat(((v.acertos / v.total) * 100).toFixed(1)) : 0,
       })).sort((a, b) => a.taxa - b.taxa)
     )
   }
@@ -198,6 +262,21 @@ export default function DesempenhoPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
+        <AlertCircle className="h-8 w-8 text-destructive" />
+        <p className="text-sm">{error}</p>
+        <button
+          onClick={() => { setError(null); setLoading(true); window.location.reload() }}
+          className="text-sm text-primary underline underline-offset-2"
+        >
+          Tentar novamente
+        </button>
       </div>
     )
   }
@@ -212,7 +291,7 @@ export default function DesempenhoPage() {
       <Tabs defaultValue="simulados">
         <TabsList>
           <TabsTrigger value="simulados">Simulados</TabsTrigger>
-          <TabsTrigger value="questoes">Questões Avulsas</TabsTrigger>
+          <TabsTrigger value="questoes">Questões</TabsTrigger>
         </TabsList>
 
         <TabsContent value="simulados" className="mt-6 space-y-6">
@@ -248,14 +327,18 @@ export default function DesempenhoPage() {
                 <Zap className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">{statsSimulados.maiorNota}/{statsSimulados.maiorTotal}</div>
-                <p className="mt-1 text-xs text-muted-foreground">{statsSimulados.maiorPercentual}% de aproveitamento</p>
+                <div className="text-2xl font-bold text-foreground">
+                  {statsSimulados.maiorTotal > 0 ? `${statsSimulados.maiorNota}/${statsSimulados.maiorTotal}` : "—"}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {statsSimulados.maiorTotal > 0 ? `${statsSimulados.maiorPercentual}% de aproveitamento` : "Nenhum simulado realizado"}
+                </p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Taxa de Aprovação</CardTitle>
-                <Target className="h-4 w-4 text-muted-foreground" />
+                <Award className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-foreground">
@@ -304,7 +387,7 @@ export default function DesempenhoPage() {
             </CardHeader>
             <CardContent>
               {materiasRisco.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Responda questões para ver sua análise de risco.</p>
+                <p className="text-sm text-muted-foreground">Realize simulados para ver sua análise de risco por disciplina.</p>
               ) : (
                 <div className="space-y-3">
                   {materiasRisco.map((m, i) => (
@@ -355,7 +438,7 @@ export default function DesempenhoPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Acertos</CardTitle>
-                <Zap className="h-4 w-4 text-muted-foreground" />
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-foreground">{statsQuestoes.acertos.toLocaleString("pt-BR")}</div>
@@ -365,7 +448,7 @@ export default function DesempenhoPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Erros</CardTitle>
-                <Zap className="h-4 w-4 text-muted-foreground" />
+                <XCircle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-destructive">{statsQuestoes.erros.toLocaleString("pt-BR")}</div>

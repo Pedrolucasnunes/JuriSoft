@@ -10,6 +10,11 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { RadioGroupItem as AltRadio } from "@/components/ui/radio-group"
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Dumbbell, Target, Lightbulb, Play, TrendingUp,
   ChevronLeft, ChevronRight, CheckCircle2, XCircle, Loader2
 } from "lucide-react"
@@ -64,6 +69,7 @@ export default function TreinoPage() {
 
   const [treinoAtivo, setTreinoAtivo] = useState<TreinoAtivo | null>(null)
   const [iniciando, setIniciando] = useState(false)
+  const [confirmarEncerrar, setConfirmarEncerrar] = useState(false)
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [respostas, setRespostas] = useState<Record<string, { acertou: boolean; correta: string }>>({})
@@ -212,7 +218,7 @@ export default function TreinoPage() {
               Questão {currentQuestion + 1} de {total} — {respondidas} respondidas
             </p>
           </div>
-          <Button variant="outline" onClick={encerrarTreino}>
+          <Button variant="outline" onClick={() => setConfirmarEncerrar(true)}>
             Encerrar treino
           </Button>
         </div>
@@ -312,6 +318,23 @@ export default function TreinoPage() {
             </div>
           </CardContent>
         </Card>
+
+        <AlertDialog open={confirmarEncerrar} onOpenChange={setConfirmarEncerrar}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Encerrar treino?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Seu progresso nesta sessão será perdido. As respostas já enviadas continuam salvas no seu histórico.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Continuar treinando</AlertDialogCancel>
+              <AlertDialogAction onClick={encerrarTreino}>
+                Encerrar mesmo assim
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     )
   }

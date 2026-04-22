@@ -114,6 +114,13 @@ interface DashboardData {
   }
 }
 
+function getSaudacao(): string {
+  const h = new Date().getHours()
+  if (h >= 5 && h < 12) return "Bom dia"
+  if (h >= 12 && h < 18) return "Boa tarde"
+  return "Boa noite"
+}
+
 // ── Page ─────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
@@ -193,7 +200,7 @@ export default function DashboardPage() {
   const emRisco = sortedAsc.slice(0, 5)
   const melhores = sortedDesc.slice(0, 5)
 
-  const metaAcerto = 50
+  const metaAcerto = 60
   const taxaGeral = data?.resumo?.taxaGeralAcerto ?? 0
   const numRisco = data?.materiasRisco?.length ?? 0
 
@@ -216,7 +223,7 @@ export default function DashboardPage() {
       {numRisco > 0 && (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-primary/30 bg-primary/10 px-4 py-3">
           <p className="text-sm text-foreground">
-            {userName ? <><span className="font-semibold">Bom dia, {userName}.</span> </> : ""}
+            {userName ? <><span className="font-semibold">{getSaudacao()}, {userName}.</span> </> : ""}
             Você tem <span className="font-semibold text-primary">{numRisco} {numRisco === 1 ? "matéria em risco" : "matérias em risco"}</span>.{" "}
             Que tal um treino rápido de 10 questões agora?
           </p>

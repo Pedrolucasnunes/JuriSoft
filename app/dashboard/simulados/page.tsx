@@ -223,10 +223,11 @@ export default function SimuladosPage() {
                           className="flex-1"
                           onClick={() => iniciarSimulado(s.id)}
                           disabled={refazendoId === s.id}
+                          title="Gera um novo simulado com questões aleatórias"
                         >
                           {refazendoId === s.id
                             ? <Loader2 className="h-4 w-4 animate-spin" />
-                            : <><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Refazer</>
+                            : <><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Novo simulado</>
                           }
                         </Button>
                         <Button
