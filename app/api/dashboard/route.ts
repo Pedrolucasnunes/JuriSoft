@@ -88,32 +88,168 @@ export async function GET(req: NextRequest) {
     taxa: m.taxa,
   }))
 
-  // 5. Desempenho por matéria agrupado
-  const agrupado = new Map<string, { subject_id: string; nome: string; total: number; acertos: number }>()
+  // 5. Desempenho por matéria — apenas simulados
+  const { data: simAttempts } = await supabase
+    .from("simulado_attempts")
+    .select("id, question_id")
+    .eq("user_id", userId)
 
-  for (const r of resumo ?? []) {
-    const existing = agrupado.get(r.subject_id)
-    if (existing) {
-      existing.total += r.total ?? 0
-      existing.acertos += r.acertos ?? 0
-    } else {
-      agrupado.set(r.subject_id, {
-        subject_id: r.subject_id,
-        nome: subjectMap[r.subject_id] ?? "Matéria desconhecida",
-        total: r.total ?? 0,
-        acertos: r.acertos ?? 0,
-      })
+  const simAttemptIds = (simAttempts ?? []).map((a) => a.id)
+
+  let desempenhoPorMateria: {
+    subject_id: string; nome: string; total: number; acertos: number; taxa_acerto: number
+  }[] = []
+
+  if (simAttemptIds.length > 0) {
+    const { data: simRespostas } = await supabase
+      .from("simulado_respostas")
+      .select("question_id, acertou")
+      .in("attempt_id", simAttemptIds)
+
+    if (simRespostas && simRespostas.length > 0) {
+      const qIds = [...new Set(simRespostas.map((r) => r.question_id))]
+
+      const { data: simQuestions } = await supabase
+        .from("questions")
+        .select("id, subject_id")
+        .in("id", qIds)
+
+      const qSubjectMap = Object.fromEntries((simQuestions ?? []).map((q) => [q.id, q.subject_id]))
+      const subjectStats = new Map<string, { total: number; acertos: number }>()
+
+      for (const r of simRespostas) {
+        const sid = qSubjectMap[r.question_id]
+        if (!sid) continue
+        const s = subjectStats.get(sid) ?? { total: 0, acertos: 0 }
+        s.total += 1
+        if (r.acertou) s.acertos += 1
+        subjectStats.set(sid, s)
+      }
+
+      desempenhoPorMateria = Array.from(subjectStats.entries())
+        .map(([subject_id, s]) => ({
+          subject_id,
+          nome: subjectMap[subject_id] ?? "Matéria desconhecida",
+          total: s.total,
+          acertos: s.acertos,
+          taxa_acerto: s.total > 0 ? parseFloat(((s.acertos / s.total) * 100).toFixed(2)) : 0,
+        }))
+        .sort((a, b) => a.taxa_acerto - b.taxa_acerto)
     }
   }
 
-  const desempenhoPorMateria = Array.from(agrupado.values())
-    .map((r) => ({
-      ...r,
-      taxa_acerto: r.total > 0 ? parseFloat(((r.acertos / r.total) * 100).toFixed(2)) : 0,
-    }))
-    .sort((a, b) => a.taxa_acerto - b.taxa_acerto)
+  // 6. Action cards — dados em paralelo
+  const todayDate   = new Date()
+  const todayStr    = todayDate.toISOString().split("T")[0]
+  const todayDow    = todayDate.getDay()
 
-  // 6. Evolução do desempenho
+  const [
+    { data: todaySlot },
+    { data: proximoSimEvent },
+    { count: totalSimulados },
+    { data: recentAttempts },
+  ] = await Promise.all([
+    // Horário disponível hoje
+    supabase
+      .from("user_availability")
+      .select("start_time")
+      .eq("user_id", userId)
+      .eq("day_of_week", todayDow)
+      .order("start_time", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+
+    // Próximo simulado agendado
+    supabase
+      .from("calendar_events")
+      .select("date, time")
+      .eq("user_id", userId)
+      .eq("type", "simulado")
+      .gte("date", todayStr)
+      .order("date", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+
+    // Total de simulados finalizados
+    supabase
+      .from("simulados")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .not("percentual", "is", null),
+
+    // Últimas práticas avulsas (para insight)
+    supabase
+      .from("question_attempts")
+      .select("question_id, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(500),
+  ])
+
+  // Matéria em risco com prática mais antiga
+  let insightMateria: { subject: string; taxa: number; diasSemTreino: number | null } | null = null
+
+  if ((materiasRiscoRaw ?? []).length > 0) {
+    if (recentAttempts && recentAttempts.length > 0) {
+      const qIds = [...new Set(recentAttempts.map((a) => a.question_id))]
+      const { data: qRows } = await supabase
+        .from("questions")
+        .select("id, subject_id")
+        .in("id", qIds)
+
+      const qSubMap = Object.fromEntries((qRows ?? []).map((q) => [q.id, q.subject_id]))
+      const lastPractice = new Map<string, Date>()
+
+      for (const a of recentAttempts) {
+        const sid = qSubMap[a.question_id]
+        if (!sid) continue
+        const d = new Date(a.created_at)
+        if (!lastPractice.has(sid) || d > lastPractice.get(sid)!) lastPractice.set(sid, d)
+      }
+
+      let chosen: (typeof materiasRiscoRaw)[0] | null = null
+      let oldestDate: Date = todayDate
+
+      for (const m of materiasRiscoRaw ?? []) {
+        const last = lastPractice.get(m.subject_id)
+        if (!last) { chosen = m; break }
+        if (last < oldestDate) { oldestDate = last; chosen = m }
+      }
+
+      if (chosen) {
+        const last = lastPractice.get(chosen.subject_id)
+        insightMateria = {
+          subject:       subjectMap[chosen.subject_id] ?? "Matéria desconhecida",
+          taxa:          chosen.taxa,
+          diasSemTreino: last
+            ? Math.floor((todayDate.getTime() - last.getTime()) / 86400000)
+            : null,
+        }
+      }
+    } else {
+      const worst = materiasRiscoRaw![0]
+      insightMateria = {
+        subject:       subjectMap[worst.subject_id] ?? "Matéria desconhecida",
+        taxa:          worst.taxa,
+        diasSemTreino: null,
+      }
+    }
+  }
+
+  const actionCards = {
+    proximaAcao: materiasRisco[0] ? {
+      subject: materiasRisco[0].nome,
+      horario: todaySlot?.start_time?.slice(0, 5) ?? null,
+    } : null,
+    proximoSimulado: proximoSimEvent ? {
+      date:   proximoSimEvent.date,
+      time:   (proximoSimEvent.time ?? "09:00").slice(0, 5),
+      numero: (totalSimulados ?? 0) + 1,
+    } : null,
+    insightMateria,
+  }
+
+  // 7. Evolução do desempenho
   const { data: historicoSimulados, error: historicoError } = await supabase
     .from("simulados")
     .select("created_at, percentual")
@@ -136,5 +272,6 @@ export async function GET(req: NextRequest) {
     materiasRisco,
     desempenhoPorMateria,
     evolucao,
+    actionCards,
   }, { status: 200 })
 }

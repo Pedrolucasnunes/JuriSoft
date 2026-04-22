@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { TrendingUp, TrendingDown, Target, FileText, CheckCircle2, AlertTriangle, ArrowRight, List } from "lucide-react"
+import { TrendingUp, TrendingDown, Target, FileText, CheckCircle2, AlertTriangle, ArrowRight, List, Clock } from "lucide-react"
 import Link from "next/link"
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid } from "recharts"
 import { supabase } from "@/lib/supabase"
@@ -59,7 +59,7 @@ interface DisciplinaItem {
   taxa_acerto: number
 }
 
-function DisciplinaRow({ item, index }: { item: DisciplinaItem; index?: number }) {
+function DisciplinaRow({ item, index, showBadge }: { item: DisciplinaItem; index?: number; showBadge?: boolean }) {
   const taxa = Number(item.taxa_acerto)
   return (
     <TooltipProvider delayDuration={300}>
@@ -71,7 +71,12 @@ function DisciplinaRow({ item, index }: { item: DisciplinaItem; index?: number }
                 {index !== undefined && (
                   <span className="text-xs text-muted-foreground w-4 shrink-0">{index + 1}.</span>
                 )}
-                <span className="text-sm text-foreground truncate max-w-[180px]">{item.nome}</span>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm text-foreground truncate max-w-[180px]">{item.nome}</span>
+                  {showBadge && (
+                    <div className="mt-0.5">{getRiskBadge(getRiskLevel(taxa))}</div>
+                  )}
+                </div>
               </div>
               <span className={`text-sm font-semibold shrink-0 ${getTextColor(taxa)}`}>
                 {taxa.toFixed(0)}%
@@ -102,6 +107,11 @@ interface DashboardData {
   materiasRisco: { subject_id: string; nome: string; taxa: number }[]
   desempenhoPorMateria: { subject_id: string; nome: string; total: number; acertos: number; taxa_acerto: number }[]
   evolucao: { date: string; nota: number }[]
+  actionCards: {
+    proximaAcao:     { subject: string; horario: string | null } | null
+    proximoSimulado: { date: string; time: string; numero: number } | null
+    insightMateria:  { subject: string; taxa: number; diasSemTreino: number | null } | null
+  }
 }
 
 // ── Page ─────────────────────────────────────────────────────────
@@ -154,19 +164,34 @@ export default function DashboardPage() {
     )
   }
 
+  // Helpers para os action cards
+  const DAYS_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
+  function fmtSimDate(dateStr: string, time: string) {
+    const [y, m, d] = dateStr.split("-").map(Number)
+    return `${DAYS_SHORT[new Date(y, m - 1, d).getDay()]} · ${time}`
+  }
+  function insightTitle(subject: string, dias: number | null) {
+    if (dias === null) return `Comece a treinar ${subject}`
+    if (dias >= 7)     return `Retome ${subject}`
+    return                    `Intensifique ${subject}`
+  }
+  function insightDesc(subject: string, taxa: number, dias: number | null) {
+    if (dias === null) return `Você nunca praticou ${subject} no treino avulso. Com ${taxa}% de acerto em simulados, é uma prioridade.`
+    if (dias >= 7)     return `Você está ${dias} dias sem praticar ${subject}. Com ${taxa}% de acerto, precisa de atenção regular.`
+    return                    `${subject} ainda está com ${taxa}% de acerto. Continue o ritmo de treino para subir a nota.`
+  }
+
+  const ac   = data?.actionCards
+  const acão = ac?.proximaAcao
+  const sim  = ac?.proximoSimulado
+  const ins  = ac?.insightMateria
+
   // Dados para o novo componente de disciplinas
   const disciplinas = data?.desempenhoPorMateria ?? []
   const sortedAsc = [...disciplinas].sort((a, b) => Number(a.taxa_acerto) - Number(b.taxa_acerto))
   const sortedDesc = [...disciplinas].sort((a, b) => Number(b.taxa_acerto) - Number(a.taxa_acerto))
   const emRisco = sortedAsc.slice(0, 5)
   const melhores = sortedDesc.slice(0, 5)
-
-  const riskDisciplines = (data?.materiasRisco ?? []).map((m) => ({
-    name: m.nome,
-    risk: getRiskLevel(Number(m.taxa)),
-    percentage: Number(m.taxa),
-    trend: Number(m.taxa) >= 50 ? "up" : "down",
-  }))
 
   const metaAcerto = 50
   const taxaGeral = data?.resumo?.taxaGeralAcerto ?? 0
@@ -267,18 +292,9 @@ export default function DashboardPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Matérias em risco</CardTitle>
             <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent className="flex items-end justify-between">
-            <div>
-              <span className="text-2xl font-bold text-foreground">{numRisco}</span>
-              <p className="mt-1 text-xs text-muted-foreground">Precisam de atenção</p>
-            </div>
-            {numRisco > 0 && (
-              <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" asChild>
-                <Link href="/dashboard/treino">
-                  Treinar <ArrowRight className="h-3 w-3" />
-                </Link>
-              </Button>
-            )}
+          <CardContent>
+            <span className="text-2xl font-bold text-foreground">{numRisco}</span>
+            <p className="mt-1 text-xs text-muted-foreground">Precisam de atenção</p>
           </CardContent>
         </Card>
       </div>
@@ -356,8 +372,8 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {disciplinas.length === 0 ? (
-              <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
-                Responda questões para ver seu desempenho por disciplina
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm text-center px-4">
+                Faça seu primeiro simulado para ver seu desempenho por disciplina
               </div>
             ) : (
               <Tabs defaultValue="risco">
@@ -384,7 +400,7 @@ export default function DashboardPage() {
                   <p className="text-xs text-muted-foreground">As 5 disciplinas com menor aproveitamento — foque aqui primeiro.</p>
                   <div className="space-y-4">
                     {emRisco.map((item, i) => (
-                      <DisciplinaRow key={item.subject_id} item={item} index={i} />
+                      <DisciplinaRow key={item.subject_id} item={item} index={i} showBadge />
                     ))}
                   </div>
                   <Legenda />
@@ -419,40 +435,124 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* ── Índice de Risco ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Índice de Risco de Reprovação</CardTitle>
-          <CardDescription>Disciplinas que precisam de mais atenção para garantir a aprovação</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {riskDisciplines.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma matéria em risco identificada ainda.</p>
-          ) : (
-            <div className="space-y-4">
-              {riskDisciplines.map((discipline) => (
-                <div key={discipline.name} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
-                  <div className="flex flex-col gap-1">
-                    <span className="font-medium text-foreground">{discipline.name}</span>
-                    <div className="flex items-center gap-2">
-                      {getRiskBadge(discipline.risk)}
-                      <span className="text-xs text-muted-foreground">{discipline.percentage}% de acerto</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="w-32 hidden sm:block">
-                      <Progress value={discipline.percentage} className="h-2" />
-                    </div>
-                    <div className={`flex items-center gap-1 text-sm ${discipline.trend === "up" ? "text-primary" : "text-destructive"}`}>
-                      {discipline.trend === "up" ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                    </div>
-                  </div>
-                </div>
-              ))}
+      {/* ── Smart Action Cards ── */}
+      <div className="grid gap-4 lg:grid-cols-3">
+
+        {/* Card 1 — Próxima ação */}
+        <Card className="flex flex-col">
+          <CardContent className="pt-5 pb-4 flex flex-col h-full gap-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                Próxima ação
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {acão?.horario ? `Hoje · ${acão.horario}` : "Hoje"}
+              </span>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            {acão ? (
+              <div>
+                <h3 className="text-base font-bold text-foreground">Treino de {acão.subject}</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  10 questões adaptativas priorizando sua matéria mais crítica.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhuma matéria em risco identificada.</p>
+            )}
+            <div className="mt-auto space-y-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
+                <Clock className="h-3 w-3" />
+                <span>18 min</span>
+                <span className="text-border">·</span>
+                <span>10 questões</span>
+              </div>
+              <Link href="/dashboard/treino" className="text-sm font-medium text-primary hover:underline flex items-center gap-1">
+                Iniciar treino <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card 2 — Simulado */}
+        <Card className="flex flex-col">
+          <CardContent className="pt-5 pb-4 flex flex-col h-full gap-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-500">
+                <span className="h-1.5 w-1.5 rounded-full bg-yellow-500" />
+                Simulado
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {sim ? fmtSimDate(sim.date, sim.time) : "—"}
+              </span>
+            </div>
+            {sim ? (
+              <div>
+                <h3 className="text-base font-bold text-foreground">Simulado completo {sim.numero}</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  80 questões · 1ª fase OAB. Replica a estrutura oficial. Tempo: 5h.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhum simulado agendado. Gere sua agenda inteligente.</p>
+            )}
+            <div className="mt-auto space-y-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
+                <Clock className="h-3 w-3" />
+                <span>5 horas</span>
+                <span className="text-border">·</span>
+                <span>80 questões</span>
+              </div>
+              <Link href={sim ? "/dashboard/simulados" : "/dashboard/calendario"} className="text-sm font-medium text-primary hover:underline flex items-center gap-1">
+                {sim ? "Iniciar simulado" : "Ir para agenda"} <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card 3 — IA sugere */}
+        <Card className="flex flex-col">
+          <CardContent className="pt-5 pb-4 flex flex-col h-full gap-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-blue-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                IA sugere
+              </span>
+              <span className="text-xs text-muted-foreground">Insight</span>
+            </div>
+            {ins ? (
+              <div>
+                <h3 className="text-base font-bold text-foreground">
+                  {insightTitle(ins.subject, ins.diasSemTreino)}
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {insightDesc(ins.subject, ins.taxa, ins.diasSemTreino)}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhuma sugestão disponível ainda.</p>
+            )}
+            <div className="mt-auto space-y-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
+                {ins ? (
+                  <>
+                    <span>Acerto: {ins.taxa}%</span>
+                    <span className="text-border">·</span>
+                    <span>{ins.diasSemTreino === null ? "Sem histórico de treino" : ins.diasSemTreino === 0 ? "Treinado hoje" : `${ins.diasSemTreino}d sem treinar`}</span>
+                  </>
+                ) : (
+                  <span>Faça simulados para gerar insights</span>
+                )}
+              </div>
+              <Link href="/dashboard/treino" className="text-sm font-medium text-primary hover:underline flex items-center gap-1">
+                Aplicar sugestão <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+      </div>
+
     </div>
   )
 }
