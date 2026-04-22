@@ -48,6 +48,14 @@ interface Progresso {
   taxaGeralAcerto: number
 }
 
+interface ResumoTreino {
+  total: number
+  acertos: number
+  erros: number
+  percentual: number
+  porMateria: { nome: string; acertos: number; total: number }[]
+}
+
 export default function TreinoPage() {
   const [quantidadeQuestoes, setQuantidadeQuestoes] = useState("10")
   const [materiasRisco, setMateriasRisco] = useState<MateriasRisco[]>([])
@@ -60,6 +68,7 @@ export default function TreinoPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [respostas, setRespostas] = useState<Record<string, { acertou: boolean; correta: string }>>({})
   const [verificando, setVerificando] = useState(false)
+  const [resumoFinal, setResumoFinal] = useState<ResumoTreino | null>(null)
 
   useEffect(() => {
     async function init() {
@@ -138,11 +147,41 @@ export default function TreinoPage() {
 
   const encerrarTreino = () => {
     setTreinoAtivo(null)
+    setResumoFinal(null)
     setAnswers({})
     setRespostas({})
     setCurrentQuestion(0)
 
-    // ✅ Recarrega progresso sem userId
+    fetch("/api/dashboard")
+      .then(r => r.json())
+      .then(d => { if (d.resumo) setProgresso(d.resumo) })
+  }
+
+  const concluirTreino = () => {
+    if (!treinoAtivo) return
+
+    const acertos = Object.values(respostas).filter((r) => r.acertou).length
+    const total = Object.keys(respostas).length
+    const erros = total - acertos
+    const percentual = total > 0 ? parseFloat(((acertos / total) * 100).toFixed(1)) : 0
+
+    const materiaMap = new Map<string, { acertos: number; total: number }>()
+    for (const questao of treinoAtivo.questoes) {
+      const resp = respostas[questao.id]
+      if (!resp) continue
+      const s = materiaMap.get(questao.subject_name) ?? { acertos: 0, total: 0 }
+      s.total += 1
+      if (resp.acertou) s.acertos += 1
+      materiaMap.set(questao.subject_name, s)
+    }
+
+    const porMateria = Array.from(materiaMap.entries())
+      .map(([nome, s]) => ({ nome, ...s }))
+      .sort((a, b) => a.acertos / a.total - b.acertos / b.total)
+
+    setTreinoAtivo(null)
+    setResumoFinal({ total, acertos, erros, percentual, porMateria })
+
     fetch("/api/dashboard")
       .then(r => r.json())
       .then(d => { if (d.resumo) setProgresso(d.resumo) })
@@ -266,13 +305,90 @@ export default function TreinoPage() {
                   Próxima <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>
               ) : (
-                <Button onClick={encerrarTreino} className="bg-primary">
+                <Button onClick={concluirTreino} className="bg-primary">
                   <CheckCircle2 className="mr-2 h-4 w-4" /> Concluir treino
                 </Button>
               )}
             </div>
           </CardContent>
         </Card>
+      </div>
+    )
+  }
+
+  // ─── RESUMO FINAL ─────────────────────────────────────────────
+  if (resumoFinal) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Treino concluído!</h1>
+          <p className="text-muted-foreground">Veja o resultado desta sessão</p>
+        </div>
+
+        <Card>
+          <CardContent className="p-6 space-y-6">
+            <div className="flex flex-col items-center gap-3 text-center">
+              {resumoFinal.percentual >= 70
+                ? <CheckCircle2 className="h-12 w-12 text-primary" />
+                : <XCircle className="h-12 w-12 text-destructive" />
+              }
+              <div>
+                <p className="text-4xl font-bold text-foreground">{resumoFinal.percentual}%</p>
+                <p className="text-muted-foreground mt-1">
+                  {resumoFinal.acertos} de {resumoFinal.total} questões corretas
+                </p>
+              </div>
+              <Progress value={resumoFinal.percentual} className="w-full h-3" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-lg border border-border bg-primary/5 p-4 text-center">
+                <p className="text-2xl font-bold text-primary">{resumoFinal.acertos}</p>
+                <p className="text-sm text-muted-foreground">Acertos</p>
+              </div>
+              <div className="rounded-lg border border-border bg-destructive/5 p-4 text-center">
+                <p className="text-2xl font-bold text-destructive">{resumoFinal.erros}</p>
+                <p className="text-sm text-muted-foreground">Erros</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {resumoFinal.porMateria.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Desempenho por disciplina</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {resumoFinal.porMateria.map((m) => {
+                const pct = m.total > 0 ? Math.round((m.acertos / m.total) * 100) : 0
+                return (
+                  <div key={m.nome} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-foreground">{m.nome}</span>
+                      <span className="font-medium text-muted-foreground">
+                        {m.acertos}/{m.total} ({pct}%)
+                      </span>
+                    </div>
+                    <Progress
+                      value={pct}
+                      className={`h-2 ${pct < 60 ? "[&>div]:bg-destructive" : pct < 70 ? "[&>div]:bg-warning" : ""}`}
+                    />
+                  </div>
+                )
+              })}
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="flex gap-3">
+          <Button className="flex-1" onClick={encerrarTreino}>
+            <Play className="mr-2 h-4 w-4" /> Novo treino
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="/dashboard/desempenho">Ver desempenho completo</a>
+          </Button>
+        </div>
       </div>
     )
   }

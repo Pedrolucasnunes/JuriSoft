@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   console.log(`[treino] userId=${userId} total=${totalQuestoes} risco=${qtdRisco} geral=${qtdGeral}`)
 
-  // 1. Questões já acertadas pelo usuário
+  // 1. Questões já acertadas pelo usuário (simulados + treino avulso em paralelo)
   const { data: attemptsData } = await supabase
     .from("simulado_attempts")
     .select("id")
@@ -52,17 +52,28 @@ export async function POST(req: NextRequest) {
 
   const attemptIds = (attemptsData ?? []).map((a) => a.id)
 
-  let idsJaAcertou: string[] = []
+  const [simAcertouResult, treinoAcertouResult] = await Promise.all([
+    attemptIds.length > 0
+      ? supabase
+          .from("simulado_respostas")
+          .select("question_id")
+          .eq("acertou", true)
+          .in("attempt_id", attemptIds)
+      : Promise.resolve({ data: [] }),
 
-  if (attemptIds.length > 0) {
-    const { data: jaAcertou } = await supabase
-      .from("simulado_respostas")
+    supabase
+      .from("question_attempts")
       .select("question_id")
-      .eq("acertou", true)
-      .in("attempt_id", attemptIds)
+      .eq("user_id", userId)
+      .eq("acertou", true),
+  ])
 
-    idsJaAcertou = (jaAcertou ?? []).map((r) => r.question_id)
-  }
+  const idsJaAcertou = [
+    ...new Set([
+      ...(simAcertouResult.data ?? []).map((r) => r.question_id),
+      ...(treinoAcertouResult.data ?? []).map((r) => r.question_id),
+    ]),
+  ]
 
   // 2. Matérias em risco
   const { data: materiasRisco } = await supabase
