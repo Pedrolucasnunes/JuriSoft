@@ -3,11 +3,9 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { FileText, Clock, Play, Loader2, RotateCcw, Trash2, AlertTriangle } from "lucide-react"
+import { Clock, Target, BarChart2, Loader2, RotateCcw, Trash2, AlertTriangle, ArrowRight, BarChart } from "lucide-react"
 import { toast } from "sonner"
 
 interface SimuladoRealizado {
@@ -102,124 +100,201 @@ export default function SimuladosPage() {
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })
 
+  const formatTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+
+  const ultimo = simuladosRealizados[0]
+  const melhorPercentual = simuladosRealizados.length > 0
+    ? Math.max(...simuladosRealizados.map((s) => s.percentual))
+    : null
+  const proximoNumero = simuladosRealizados.length + 1
+  const metaAprovacao = 60
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Simulados</h1>
-        <p className="text-muted-foreground">
-          Pratique com simulados completos no formato da prova oficial da OAB
-        </p>
+        <p className="text-muted-foreground text-sm">Treine como se fosse o exame real</p>
       </div>
 
-      {/* ── Card de iniciar simulado ── */}
-      <Card className="border-primary/30 bg-primary/5">
-        <CardHeader>
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <CardTitle className="text-base">Simulado OAB — Multidisciplinar</CardTitle>
-              <CardDescription className="mt-1">
-                80 questões aleatórias cobrindo todas as disciplinas no formato oficial da OAB
-              </CardDescription>
+      {/* ── Banner: jornada ── */}
+      {ultimo && (
+        <div className="rounded-xl border border-border/50 bg-card p-6" style={{ background: "linear-gradient(135deg, hsl(var(--card)) 60%, hsl(var(--primary)/0.08))" }}>
+          <div className="flex items-start justify-between gap-6">
+            <div className="flex-1 min-w-0">
+              <div className="inline-flex items-center gap-1.5 text-xs text-primary font-medium bg-primary/10 border border-primary/20 rounded-full px-3 py-1 mb-4">
+                <BarChart2 className="h-3.5 w-3.5" />
+                Sua jornada de simulados
+              </div>
+              <p className="text-3xl font-extrabold text-foreground">
+                Último resultado:{" "}
+                <span className="text-primary">
+                  {ultimo.acertos}/{ultimo.numero_questoes} ({ultimo.percentual}%)
+                </span>
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                {ultimo.percentual >= metaAprovacao
+                  ? "Você atingiu a meta de aprovação. Continue assim!"
+                  : `Faltam ${(metaAprovacao - ultimo.percentual).toFixed(1)}% para atingir a meta de aprovação (${metaAprovacao}%). Cada simulado te deixa mais perto.`}
+              </p>
+              <div className="mt-4 h-2 rounded-full bg-muted overflow-hidden w-full max-w-sm">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${Math.min(ultimo.percentual, 100)}%` }}
+                />
+              </div>
             </div>
-            <Badge variant="secondary" className="shrink-0">Todas as matérias</Badge>
+            <div className="hidden sm:flex flex-col gap-3 shrink-0">
+              <div className="rounded-lg border border-border/40 bg-background/60 px-5 py-3 text-center min-w-[90px]">
+                <p className="text-xs text-muted-foreground">Melhor</p>
+                <p className="text-xl font-bold text-foreground">{melhorPercentual}%</p>
+              </div>
+              <div className="rounded-lg border border-border/40 bg-background/60 px-5 py-3 text-center min-w-[90px]">
+                <p className="text-xs text-muted-foreground">Simulados</p>
+                <p className="text-xl font-bold text-foreground">{simuladosRealizados.length}</p>
+              </div>
+            </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
-            <span className="flex items-center gap-1">
-              <FileText className="h-4 w-4" /> 80 questões
-            </span>
-            <span className="flex items-center gap-1">
-              <Clock className="h-4 w-4" /> 5 horas
-            </span>
+        </div>
+      )}
+
+      {/* ── Card: próximo simulado ── */}
+      <div className="rounded-xl border border-border/50 bg-card p-6" style={{ background: "linear-gradient(135deg, hsl(var(--card)) 50%, hsl(var(--primary)/0.06))" }}>
+        <div className="flex items-start justify-between gap-6">
+          <div className="flex-1 min-w-0">
+            <div className="inline-flex items-center gap-1.5 text-xs text-primary font-medium bg-primary/10 border border-primary/20 rounded-full px-3 py-1 mb-3">
+              <Target className="h-3.5 w-3.5" />
+              Simulado completo · 1ª fase OAB
+            </div>
+            <h2 className="text-2xl font-extrabold text-foreground mb-2">
+              Simulado completo {proximoNumero}
+            </h2>
+            <p className="text-sm text-muted-foreground max-w-lg">
+              Réplica fiel da estrutura oficial: 80 questões em 5 horas, com peso por disciplina igual ao exame. Use para medir seu nível real e calibrar a estratégia.
+            </p>
+            <div className="flex flex-wrap items-center gap-4 mt-4 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <Clock className="h-4 w-4 text-muted-foreground/70" /> 5h
+                <span className="text-xs">Tempo total</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <BarChart className="h-4 w-4 text-muted-foreground/70" /> 80 questões
+                <span className="text-xs">Estrutura oficial</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Target className="h-4 w-4 text-muted-foreground/70" /> Meta 60%
+                <span className="text-xs">Para aprovação</span>
+              </span>
+            </div>
           </div>
-          <Button
-            className="w-full"
-            onClick={() => iniciarSimulado()}
-            disabled={loading}
-          >
-            {loading
-              ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando simulado...</>
-              : <><Play className="mr-2 h-4 w-4" /> Iniciar simulado</>
-            }
-          </Button>
-        </CardContent>
-      </Card>
+          <div className="shrink-0 self-center">
+            <Button
+              size="lg"
+              className="gap-2 text-base font-semibold px-6"
+              onClick={() => iniciarSimulado()}
+              disabled={loading}
+            >
+              {loading ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Gerando...</>
+              ) : (
+                <>Iniciar simulado <ArrowRight className="h-4 w-4" /></>
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
 
       {/* ── Histórico ── */}
       <div>
-        <h2 className="text-sm font-medium text-muted-foreground mb-3">
-          Histórico{!loadingHistorico && simuladosRealizados.length > 0 && ` · ${simuladosRealizados.length} realizado${simuladosRealizados.length > 1 ? "s" : ""}`}
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">Histórico de simulados</h2>
+          </div>
+          {!loadingHistorico && simuladosRealizados.length > 0 && (
+            <span className="text-xs text-muted-foreground">{simuladosRealizados.length} tentativa{simuladosRealizados.length > 1 ? "s" : ""}</span>
+          )}
+        </div>
 
         {loadingHistorico ? (
           <div className="flex items-center justify-center h-32">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : simuladosRealizados.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum simulado realizado ainda. Inicie seu primeiro acima.</p>
+          <p className="text-sm text-muted-foreground py-4">Nenhum simulado realizado ainda. Inicie seu primeiro acima.</p>
         ) : (
           <div className="space-y-3">
-            {simuladosRealizados.map((s) => {
-              const aprovado = s.percentual >= 60
+            {simuladosRealizados.map((s, idx) => {
+              const aprovado = s.percentual >= metaAprovacao
+              const anterior = simuladosRealizados[idx + 1]
+              const delta = anterior ? +(s.percentual - anterior.percentual).toFixed(1) : null
               return (
-                <Card key={s.id} className="transition-all hover:border-border/80">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="font-medium text-foreground truncate">
-                          {s.titulo ?? "Simulado OAB — Multidisciplinar"}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {formatDate(s.created_at)}
-                        </p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className={`text-xl font-bold ${aprovado ? "text-primary" : "text-destructive"}`}>
-                          {s.acertos}/{s.numero_questoes}
-                        </p>
-                        <p className={`text-xs font-medium ${aprovado ? "text-primary" : "text-destructive"}`}>
-                          {s.percentual}% — {aprovado ? "Aprovado" : "Reprovado"}
-                        </p>
-                      </div>
+                <div key={s.id} className="rounded-xl border border-border/50 bg-card p-4 flex items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-foreground truncate">
+                        {s.titulo ?? "Simulado OAB — Multidisciplinar"}
+                      </p>
                     </div>
-                    <div className="flex gap-2 mt-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => router.push(`/dashboard/simulados/${s.id}?gabarito=true`)}
-                      >
-                        Ver gabarito
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => iniciarSimulado(s.id)}
-                        disabled={refazendoId === s.id}
-                        title="Gera um novo simulado com questões aleatórias"
-                      >
-                        {refazendoId === s.id
-                          ? <Loader2 className="h-4 w-4 animate-spin" />
-                          : <><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Novo simulado</>
-                        }
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-destructive hover:text-destructive hover:border-destructive/50"
-                        onClick={() => setConfirmarExclusao(s)}
-                        disabled={deletandoId === s.id}
-                      >
-                        {deletandoId === s.id
-                          ? <Loader2 className="h-4 w-4 animate-spin" />
-                          : <Trash2 className="h-3.5 w-3.5" />
-                        }
-                      </Button>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {formatDate(s.created_at)} · {formatTime(s.created_at)}
+                    </p>
+                    <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden w-full max-w-[200px]">
+                      <div
+                        className={`h-full rounded-full transition-all ${aprovado ? "bg-primary" : "bg-amber-500"}`}
+                        style={{ width: `${Math.min(s.percentual, 100)}%` }}
+                      />
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <p className={`text-xl font-bold ${aprovado ? "text-primary" : "text-amber-500"}`}>
+                      {s.percentual}%
+                    </p>
+                    <p className="text-xs text-muted-foreground">{s.acertos}/{s.numero_questoes}</p>
+                    {delta !== null && (
+                      <p className={`text-xs font-medium ${delta >= 0 ? "text-primary" : "text-destructive"}`}>
+                        {delta >= 0 ? "+" : ""}{delta}% vs anterior
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => router.push(`/dashboard/simulados/${s.id}?gabarito=true`)}
+                    >
+                      Ver análise
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => iniciarSimulado(s.id)}
+                      disabled={refazendoId === s.id}
+                    >
+                      {refazendoId === s.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <><RotateCcw className="mr-1 h-3 w-3" />Refazer focado</>
+                      }
+                    </Button>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => setConfirmarExclusao(s)}
+                    disabled={deletandoId === s.id}
+                  >
+                    {deletandoId === s.id
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Trash2 className="h-4 w-4" />
+                    }
+                  </Button>
+                </div>
               )
             })}
           </div>
