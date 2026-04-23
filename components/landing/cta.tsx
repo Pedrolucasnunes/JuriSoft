@@ -5,63 +5,60 @@ import { FadeIn } from "@/components/ui/fade-in"
 
 export function CTA() {
   return (
-    <section className="py-20 lg:py-32">
-      <div className="mx-auto max-w-7xl px-4 lg:px-8">
+    <section id="cta" className="relative overflow-hidden py-24 lg:py-32">
+
+      {/* Radial green glow — full section background */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: 'radial-gradient(ellipse 80% 60% at 50% 50%, rgba(16,185,129,0.18), transparent 70%)',
+        }}
+      />
+
+      <div className="relative mx-auto max-w-4xl px-4 text-center lg:px-8">
+
         <FadeIn duration={800}>
-          <div className="relative overflow-hidden rounded-3xl border border-border bg-card p-8 sm:p-12 lg:p-16">
-
-            {/* Barra de acento topo */}
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-[#b8860b] to-primary" />
-
-            {/* Glow de fundo */}
-            <div className="absolute inset-0 -z-10">
-              <div className="absolute left-0 top-0 h-full w-full bg-gradient-to-br from-primary/8 via-transparent to-[#b8860b]/6" />
-            </div>
-
-            <div className="mx-auto max-w-2xl text-center">
-
-              {/* Eyebrow */}
-              <FadeIn delay={100}>
-                <p className="mb-5 font-mono text-xs font-medium uppercase tracking-[0.12em] text-[#b8860b]">
-                  Comece agora
-                </p>
-              </FadeIn>
-
-              {/* Headline */}
-              <FadeIn delay={200}>
-                <h2 className="text-3xl font-black leading-tight tracking-tight text-foreground sm:text-4xl"
-                    style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
-                  Quanto tempo você ainda vai estudar sem saber o que está errado?
-                </h2>
-              </FadeIn>
-
-              {/* Sub */}
-              <FadeIn delay={300}>
-                <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-                  Faça o diagnóstico agora, descubra suas maiores fraquezas e comece a estudar com propósito. Em menos de 10 minutos você já sabe o que muda.
-                </p>
-              </FadeIn>
-
-              {/* Buttons */}
-              <FadeIn delay={400}>
-                <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                  <Button size="lg" asChild className="w-full gap-2 py-6 text-base font-semibold sm:w-fit sm:px-8">
-                    <Link href="/cadastro">
-                      Começar diagnóstico gratuito
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                  <Button size="lg" variant="outline" asChild className="w-full py-6 text-base sm:w-fit sm:px-8">
-                    <Link href="/cadastro">Criar conta e explorar</Link>
-                  </Button>
-                </div>
-                <p className="mt-4 font-mono text-xs tracking-wide text-muted-foreground">
-                  Sem cartão de crédito · Resultado em minutos · Cancele quando quiser
-                </p>
-              </FadeIn>
-            </div>
-          </div>
+          <h2
+            className="text-5xl font-black leading-[1.05] tracking-tight text-foreground md:text-6xl"
+            style={{ fontFamily: "'Fraunces', Georgia, serif" }}
+          >
+            Sua aprovação{" "}
+            <em className="not-italic text-primary">começa agora</em>.
+          </h2>
         </FadeIn>
+
+        <FadeIn delay={150} duration={700}>
+          <p className="mx-auto mt-5 max-w-xl text-lg text-muted-foreground">
+            10 minutos de diagnóstico. 0 reais. Um plano pronto pra você mudar de vida.
+          </p>
+        </FadeIn>
+
+        <FadeIn delay={300} duration={700}>
+          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Button
+              size="lg"
+              asChild
+              className="w-full gap-2 py-6 text-base font-semibold sm:w-fit sm:px-8"
+            >
+              <Link href="/cadastro">
+                Começar diagnóstico gratuito
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              asChild
+              className="w-full py-6 text-base sm:w-fit sm:px-8"
+            >
+              <Link href="#planos">Ver planos</Link>
+            </Button>
+          </div>
+          <p className="mt-6 font-mono text-xs text-muted-foreground">
+            Sem cartão · 7 dias grátis no Pro · Cancele quando quiser
+          </p>
+        </FadeIn>
+
       </div>
     </section>
   )

@@ -5,83 +5,86 @@ import { FadeIn } from "@/components/ui/fade-in"
 
 const plans = [
   {
-    id: "mensal",
-    label: "Mensal",
-    price: "R$ 49",
-    period: "/mês",
+    id: "gratis",
+    label: "Grátis",
+    price: "R$ 0",
+    period: "pra sempre",
     priceTotal: null,
-    description: "Para quem quer testar antes de se comprometer.",
+    description: "Para começar a entender seus pontos fracos sem gastar nada.",
     highlight: false,
     badge: null,
     features: [
       "Diagnóstico completo por matéria",
-      "Simulados ilimitados no formato OAB",
-      "Treinos gerados pelos seus erros",
-      "Análise de desempenho por disciplina",
-      "Acesso ao banco de 15k+ questões",
+      "Plano de estudos inicial",
+      "20 questões por dia",
     ],
-    cta: "Começar agora",
+    missing: [
+      "Simulados completos",
+      "Tutor IA 24/7",
+    ],
+    cta: "Começar grátis",
     href: "/cadastro",
   },
   {
-    id: "trimestral",
-    label: "3 Meses",
-    price: "R$ 39",
+    id: "pro",
+    label: "Pro",
+    price: "R$ 49",
     period: "/mês",
-    priceTotal: "R$ 117 cobrado a cada 3 meses",
-    description: "O prazo certo para quem tem exame marcado.",
+    priceTotal: "7 dias grátis · cancele quando quiser",
+    description: "Para quem quer passar no próximo exame com metade do esforço.",
     highlight: true,
     badge: "Mais escolhido",
     features: [
-      "Tudo do plano mensal",
-      "Economia de R$ 30 vs mensal",
-      "Plano de estudos semanal",
-      "Relatório de evolução quinzenal",
-      "Suporte prioritário por chat",
+      "Tudo do Grátis",
+      "Questões ilimitadas",
+      "Simulados completos estilo FGV",
+      "Tutor IA 24/7",
+      "Resumos e mapas mentais",
+      "Revisão espaçada automática",
     ],
-    cta: "Escolher este plano",
+    missing: [],
+    cta: "Começar 7 dias grátis",
     href: "/cadastro",
   },
   {
-    id: "anual",
-    label: "Anual",
-    price: "R$ 29",
+    id: "aprovacao",
+    label: "Aprovação",
+    price: "R$ 89",
     period: "/mês",
-    priceTotal: "R$ 348 cobrado anualmente",
-    description: "Para quem estuda com consistência e quer o melhor custo.",
+    priceTotal: "garantia ou dinheiro de volta",
+    description: "Para quem quer resultado garantido — ou o dinheiro de volta.",
     highlight: false,
-    badge: "Melhor custo",
+    badge: "Garantia total",
     features: [
-      "Tudo do plano trimestral",
-      "Economia de R$ 240 vs mensal",
-      "Módulos de revisão OAB 2ª fase",
-      "Histórico completo de evolução",
-      "Suporte prioritário + onboarding",
+      "Tudo do Pro",
+      "Mentoria ao vivo semanal",
+      "Correção de peças práticas",
+      "Garantia: não passou, devolvemos",
     ],
-    cta: "Escolher este plano",
+    missing: [],
+    cta: "Quero aprovação garantida",
     href: "/cadastro",
   },
 ]
 
 export function Pricing() {
   return (
-    <section id="precos" className="py-20 lg:py-32">
+    <section id="planos" className="py-20 lg:py-32">
       <div className="mx-auto max-w-7xl px-4 lg:px-8">
 
         {/* Heading */}
         <FadeIn>
           <div className="mx-auto max-w-2xl text-center">
-            <p className="mb-3 font-mono text-xs font-medium uppercase tracking-[0.12em] text-[#b8860b]">
-              Planos
-            </p>
+            <span className="badge-pill mb-4 inline-flex">Planos</span>
             <h2
               className="text-3xl font-black leading-tight tracking-tight text-foreground sm:text-4xl"
               style={{ fontFamily: "'Fraunces', Georgia, serif" }}
             >
-              Invista no que realmente<br className="hidden sm:block" /> vai te aprovar
+              Menos que um{" "}
+              <em className="not-italic text-primary">café por dia</em>.
             </h2>
             <p className="mt-4 text-lg text-muted-foreground">
-              Sem enrolação. Escolha o período, comece hoje e pare de reprovar.
+              Comece grátis. Assine só quando tiver certeza.
             </p>
           </div>
         </FadeIn>
@@ -94,7 +97,7 @@ export function Pricing() {
                 className={`relative flex h-full flex-col rounded-2xl border p-8 ${
                   plan.highlight
                     ? "border-primary bg-primary text-primary-foreground shadow-2xl shadow-primary/20 ring-1 ring-primary"
-                    : "card-hover border-border bg-card hover:border-primary/40 hover:shadow-primary/5"
+                    : "card-hover border-border bg-card hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
                 }`}
               >
                 {/* Badge */}
@@ -104,7 +107,7 @@ export function Pricing() {
                       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap ${
                         plan.highlight
                           ? "bg-[#b8860b] text-white"
-                          : "border border-[#b8860b]/30 bg-[#fff4cc] text-[#b8860b]"
+                          : "border border-[#b8860b]/30 bg-[#fff4cc] text-[#b8860b] dark:border-[#b8860b]/20 dark:bg-[#b8860b]/10"
                       }`}
                     >
                       <Zap className="h-3 w-3" />
@@ -139,7 +142,6 @@ export function Pricing() {
                   </span>
                 </div>
 
-                {/* Total */}
                 {plan.priceTotal && (
                   <p
                     className={`mt-1 font-mono text-xs ${
@@ -150,7 +152,6 @@ export function Pricing() {
                   </p>
                 )}
 
-                {/* Description */}
                 <p
                   className={`mt-3 text-sm leading-relaxed ${
                     plan.highlight ? "text-primary-foreground/80" : "text-muted-foreground"
@@ -159,14 +160,13 @@ export function Pricing() {
                   {plan.description}
                 </p>
 
-                {/* Divider */}
                 <div
                   className={`my-6 h-px ${
                     plan.highlight ? "bg-primary-foreground/20" : "bg-border"
                   }`}
                 />
 
-                {/* Features */}
+                {/* Features ativas */}
                 <ul className="flex flex-col gap-3">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-2.5">
@@ -183,24 +183,33 @@ export function Pricing() {
                       </div>
                       <span
                         className={`text-sm leading-snug ${
-                          plan.highlight ? "text-primary-foreground/90" : "text-muted-foreground"
+                          plan.highlight ? "text-primary-foreground/90" : "text-foreground"
                         }`}
                       >
                         {feature}
                       </span>
                     </li>
                   ))}
+                  {/* Features ausentes */}
+                  {plan.missing.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2.5 opacity-40">
+                      <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-muted">
+                        <span className="text-[10px]">✕</span>
+                      </div>
+                      <span className="text-sm leading-snug text-muted-foreground line-through">
+                        {feature}
+                      </span>
+                    </li>
+                  ))}
                 </ul>
 
-                {/* CTA — empurrado para o fundo */}
+                {/* CTA */}
                 <div className="mt-auto pt-8">
                   <Button
                     size="lg"
                     asChild
                     className={`w-full gap-2 py-6 text-base font-semibold ${
-                      plan.highlight
-                        ? "bg-white text-primary hover:bg-white/90"
-                        : ""
+                      plan.highlight ? "bg-white text-primary hover:bg-white/90" : ""
                     }`}
                     variant={plan.highlight ? "default" : "outline"}
                   >
@@ -215,7 +224,6 @@ export function Pricing() {
           ))}
         </div>
 
-        {/* Rodapé */}
         <FadeIn delay={400}>
           <p className="mt-10 text-center font-mono text-xs text-muted-foreground">
             Todos os planos incluem acesso completo · Cancele quando quiser · Pagamento seguro

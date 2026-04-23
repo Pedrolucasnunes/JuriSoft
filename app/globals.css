@@ -200,3 +200,75 @@
     opacity: 0.9;
   }
 }
+
+/* ── Badge pill (eyebrow labels da landing) ──────────────────── */
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: #FEF3C7;
+  color: #065F46;
+  font-family: var(--font-dm-mono), var(--font-geist-mono), monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ── Grid quadriculado sutil (hero) ──────────────────────────── */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: radial-gradient(ellipse 100% 100% at 50% 50%, black 30%, transparent 80%);
+  mask-image: radial-gradient(ellipse 100% 100% at 50% 50%, black 30%, transparent 80%);
+  pointer-events: none;
+}
+
+/* ── Animações da landing page ───────────────────────────────── */
+
+/* Marquee infinito (social proof) */
+@keyframes marquee-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 30s linear infinite;
+}
+
+/* Card flutuante (hero mockup) */
+@keyframes card-float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-8px); }
+}
+@keyframes card-shimmer {
+  0%   { box-shadow: 0 10px 40px -12px rgba(0,0,0,0.4), 0 0 0 0 rgba(16,185,129,0); }
+  50%  { box-shadow: 0 10px 40px -12px rgba(0,0,0,0.4), 0 0 30px 6px rgba(16,185,129,0.13); }
+  100% { box-shadow: 0 10px 40px -12px rgba(0,0,0,0.4), 0 0 0 0 rgba(16,185,129,0); }
+}
+@keyframes card-float-slow {
+  0%, 100% { transform: translateY(0px) rotate(-1deg); }
+  50%       { transform: translateY(-6px) rotate(1deg); }
+}
+.animate-card-float {
+  animation: card-float 6s ease-in-out infinite, card-shimmer 6s ease-in-out infinite;
+}
+.animate-card-float-slow {
+  animation: card-float-slow 7s ease-in-out 1s infinite;
+}
+
+/* Reveal no scroll */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+.reveal.in {
+  opacity: 1;
+  transform: translateY(0);
+}

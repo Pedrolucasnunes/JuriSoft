@@ -2,37 +2,97 @@ import Link from "next/link"
 
 export function Footer() {
   return (
-    <footer className="border-t border-border bg-card py-10">
+    <footer className="border-t border-border py-14">
       <div className="mx-auto max-w-7xl px-4 lg:px-8">
-        <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
 
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <img src="/Sem fundo.png" alt="AprovaOAB" className="h-7 w-7 object-contain" />
-            <span className="text-lg font-bold tracking-tight"
-                  style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
-              <span className="text-primary">aprova</span><span className="text-foreground/70">OAB</span>
-            </span>
-          </Link>
+        {/* 4-column grid */}
+        <div className="grid gap-8 md:grid-cols-4">
 
-          {/* Links */}
-          <nav className="flex flex-wrap items-center justify-center gap-6">
-            <Link href="#" className="font-mono text-xs text-muted-foreground transition-colors hover:text-foreground">
-              Termos de uso
+          {/* Brand */}
+          <div>
+            <Link href="/" className="flex items-center gap-2">
+              <img src="/Sem fundo.png" alt="AprovaOAB" className="h-7 w-7 object-contain" />
+              <span
+                className="text-xl font-bold tracking-tight"
+                style={{ fontFamily: "'Fraunces', Georgia, serif" }}
+              >
+                <span className="text-primary">aprova</span>
+                <span className="text-foreground/70">OAB</span>
+              </span>
             </Link>
-            <Link href="#" className="font-mono text-xs text-muted-foreground transition-colors hover:text-foreground">
-              Privacidade
-            </Link>
-            <Link href="#" className="font-mono text-xs text-muted-foreground transition-colors hover:text-foreground">
-              Suporte
-            </Link>
-          </nav>
+            <p className="mt-4 max-w-xs text-sm text-muted-foreground">
+              A IA que estuda por você. Feita por advogados e engenheiros no Brasil.
+            </p>
+          </div>
 
-          {/* Copyright */}
-          <p className="font-mono text-xs text-muted-foreground">
-            © {new Date().getFullYear()} AprovaOAB
-          </p>
+          {/* Produto */}
+          <div>
+            <p className="mb-4 text-sm font-semibold text-foreground">Produto</p>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <Link href="#como-funciona" className="transition-opacity hover:opacity-80">
+                  Como funciona
+                </Link>
+              </li>
+              <li>
+                <Link href="#diferenciais" className="transition-opacity hover:opacity-80">
+                  Diferenciais
+                </Link>
+              </li>
+              <li>
+                <Link href="#planos" className="transition-opacity hover:opacity-80">
+                  Planos
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Empresa */}
+          <div>
+            <p className="mb-4 text-sm font-semibold text-foreground">Empresa</p>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <Link href="#" className="transition-opacity hover:opacity-80">
+                  Sobre
+                </Link>
+              </li>
+              <li>
+                <Link href="#" className="transition-opacity hover:opacity-80">
+                  Blog
+                </Link>
+              </li>
+              <li>
+                <Link href="#" className="transition-opacity hover:opacity-80">
+                  Contato
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Legal */}
+          <div>
+            <p className="mb-4 text-sm font-semibold text-foreground">Legal</p>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <Link href="#" className="transition-opacity hover:opacity-80">
+                  Termos de uso
+                </Link>
+              </li>
+              <li>
+                <Link href="#" className="transition-opacity hover:opacity-80">
+                  Privacidade
+                </Link>
+              </li>
+            </ul>
+          </div>
         </div>
+
+        {/* Bottom bar */}
+        <div className="mt-10 flex flex-col justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground md:flex-row">
+          <p>© {new Date().getFullYear()} aprovaOAB · Todos os direitos reservados</p>
+          <p>Feito com IA · Hospedado no Brasil</p>
+        </div>
+
       </div>
     </footer>
   )

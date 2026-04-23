@@ -30,8 +30,11 @@ export function Header() {
           <Link href="#diferenciais" className="font-mono text-sm text-muted-foreground transition-colors hover:text-foreground">
             Diferenciais
           </Link>
-          <Link href="#precos" className="font-mono text-sm text-muted-foreground transition-colors hover:text-foreground">
-            Preços
+          <Link href="#depoimentos" className="font-mono text-sm text-muted-foreground transition-colors hover:text-foreground">
+            Depoimentos
+          </Link>
+          <Link href="#planos" className="font-mono text-sm text-muted-foreground transition-colors hover:text-foreground">
+            Planos
           </Link>
         </nav>
 
@@ -64,24 +67,31 @@ export function Header() {
           <nav className="flex flex-col gap-1">
             <Link
               href="#como-funciona"
-              className="rounded-lg px-3 py-3 font-mono text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              className="rounded-lg px-3 py-3 font-mono text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               onClick={() => setIsMenuOpen(false)}
             >
               Como funciona
             </Link>
             <Link
               href="#diferenciais"
-              className="rounded-lg px-3 py-3 font-mono text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              className="rounded-lg px-3 py-3 font-mono text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               onClick={() => setIsMenuOpen(false)}
             >
               Diferenciais
             </Link>
             <Link
-              href="#precos"
-              className="rounded-lg px-3 py-3 font-mono text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              href="#depoimentos"
+              className="rounded-lg px-3 py-3 font-mono text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               onClick={() => setIsMenuOpen(false)}
             >
-              Preços
+              Depoimentos
+            </Link>
+            <Link
+              href="#planos"
+              className="rounded-lg px-3 py-3 font-mono text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              Planos
             </Link>
 
             <div className="my-3 flex items-center justify-between border-t border-border pt-3">
