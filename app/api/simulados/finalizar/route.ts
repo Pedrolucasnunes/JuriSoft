@@ -77,11 +77,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Nenhuma questão respondida" }, { status: 400 })
   }
 
-  // 3. Calcula métricas
-  const total = respostas.length
+  // 3. Busca numero_questoes do simulado (total oficial da prova, ex: 80)
+  const { data: simData, error: simFetchError } = await supabase
+    .from("simulados")
+    .select("numero_questoes")
+    .eq("id", simuladoId)
+    .eq("user_id", userId)
+    .single()
+
+  if (simFetchError || !simData) {
+    console.error("[finalizar] Simulado não encontrado:", simFetchError?.message)
+    return NextResponse.json({ error: "Simulado não encontrado" }, { status: 404 })
+  }
+
+  const numeroQuestoes = simData.numero_questoes ?? 80
+
+  // 4. Calcula métricas — percentual sobre o total da prova, não só sobre as respondidas
+  // Questões não respondidas contam como erros (padrão OAB)
+  const total = respostas.length          // quantas o usuário respondeu
   const acertos = respostas.filter((r) => r.acertou).length
-  const erros = total - acertos
-  const percentual = parseFloat(((acertos / total) * 100).toFixed(2))
+  const erros = numeroQuestoes - acertos  // inclui não respondidas
+  const percentual = parseFloat(((acertos / numeroQuestoes) * 100).toFixed(2))
 
   console.log(`[finalizar] Resultado — acertos=${acertos} erros=${erros} percentual=${percentual}%`)
 
