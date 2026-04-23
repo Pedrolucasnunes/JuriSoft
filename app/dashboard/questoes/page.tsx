@@ -9,8 +9,13 @@ import { Label } from "@/components/ui/label"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { Search, SlidersHorizontal, CheckCircle2, XCircle, Loader2, RotateCcw } from "lucide-react"
+import {
+  Search, SlidersHorizontal, CheckCircle2, XCircle,
+  Loader2, ChevronLeft, Maximize2, BookOpen, PenLine, RotateCcw,
+} from "lucide-react"
 import { supabase } from "@/lib/supabase"
+
+type Modo = "resolver" | "explorar"
 
 interface Questao {
   id: string
@@ -41,25 +46,41 @@ interface Pagination {
   totalPages: number
 }
 
+interface RespostaState {
+  selecionada: string
+  correta: string | null
+  acertou: boolean | null
+  explicacao: string | null
+  verificada: boolean
+  verificando: boolean
+}
+
+const emptyResposta: RespostaState = {
+  selecionada: "",
+  correta: null,
+  acertou: null,
+  explicacao: null,
+  verificada: false,
+  verificando: false,
+}
+
 function getDificuldadeColor(dificuldade: string) {
   switch (dificuldade?.toLowerCase()) {
-    case "fácil":
-    case "facil":
+    case "fácil": case "facil":
       return "bg-primary/15 text-primary border-primary/20"
-    case "média":
-    case "media":
-    case "médio":
-    case "medio":
+    case "média": case "media": case "médio": case "medio":
       return "bg-yellow-500/15 text-yellow-500 border-yellow-500/20"
-    case "difícil":
-    case "dificil":
+    case "difícil": case "dificil":
       return "bg-destructive/15 text-destructive border-destructive/20"
     default:
       return "bg-muted text-muted-foreground"
   }
 }
 
-function LetraBox({ letra, estado }: { letra: string; estado: "neutro" | "selecionado" | "correto" | "errado" | "desbotado" }) {
+function LetraBox({ letra, estado }: {
+  letra: string
+  estado: "neutro" | "selecionado" | "correto" | "errado" | "desbotado"
+}) {
   const classes = {
     neutro: "bg-muted text-muted-foreground",
     selecionado: "bg-primary/20 text-primary",
@@ -74,14 +95,13 @@ function LetraBox({ letra, estado }: { letra: string; estado: "neutro" | "seleci
   )
 }
 
-function QuestaoCard({ questao, userId }: { questao: Questao; userId: string }) {
-  const [resposta, setResposta] = useState<string>("")
-  const [mostrarResposta, setMostrarResposta] = useState(false)
-  const [respostaCorreta, setRespostaCorreta] = useState<string | null>(null)
-  const [explicacao, setExplicacao] = useState<string | null>(null)
-  const [acertou, setAcertou] = useState<boolean | null>(null)
-  const [verificando, setVerificando] = useState(false)
-
+function Alternativas({ questao, resposta, onSelecionar, compact }: {
+  questao: Questao
+  resposta: RespostaState
+  onSelecionar: (letra: string) => void
+  compact?: boolean
+}) {
+  const { selecionada, correta, verificada, acertou, explicacao } = resposta
   const alternativas = [
     { letra: "A", texto: questao.alternativa_a },
     { letra: "B", texto: questao.alternativa_b },
@@ -89,46 +109,72 @@ function QuestaoCard({ questao, userId }: { questao: Questao; userId: string }) 
     { letra: "D", texto: questao.alternativa_d },
   ]
 
-  const handleVerificar = async () => {
-    if (!resposta || !userId) return
-    setVerificando(true)
-
-    const res = await fetch("/api/simulados/resposta", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, questionId: questao.id, simuladoId: null, resposta }),
-    })
-
-    const data = await res.json()
-    setVerificando(false)
-
-    if (!res.ok) { console.error("Erro ao verificar:", data.error); return }
-
-    setAcertou(data.acertou)
-    setRespostaCorreta(data.resposta_correta)
-    setMostrarResposta(true)
-
-    const { data: qData } = await supabase
-      .from("questions").select("explicacao").eq("id", questao.id).single()
-    if (qData?.explicacao) setExplicacao(qData.explicacao)
-  }
-
-  const handleTentarNovamente = () => {
-    setResposta(""); setMostrarResposta(false)
-    setRespostaCorreta(null); setExplicacao(null); setAcertou(null)
-  }
-
-  const getEstadoLetra = (letra: string) => {
-    if (!mostrarResposta) return resposta === letra ? "selecionado" : "neutro"
-    if (letra === respostaCorreta) return "correto"
-    if (letra === resposta) return "errado"
+  const getEstado = (letra: string): "neutro" | "selecionado" | "correto" | "errado" | "desbotado" => {
+    if (!verificada) return selecionada === letra ? "selecionado" : "neutro"
+    if (letra === correta) return "correto"
+    if (letra === selecionada) return "errado"
     return "desbotado"
   }
 
   return (
+    <div className="space-y-2">
+      {alternativas.map((alt) => {
+        const estado = getEstado(alt.letra)
+        const isCorreto = verificada && alt.letra === correta
+        const isErrado = verificada && alt.letra === selecionada && alt.letra !== correta
+        const isDesbotado = verificada && alt.letra !== correta && alt.letra !== selecionada
+
+        return (
+          <button
+            key={alt.letra}
+            disabled={verificada}
+            onClick={() => !verificada && onSelecionar(alt.letra)}
+            className={`w-full flex items-start gap-3 rounded-lg border ${compact ? "px-3 py-2.5" : "px-4 py-3"} text-left transition-all duration-150 ${
+              isCorreto
+                ? "border-primary/40 bg-primary/8"
+                : isErrado
+                ? "border-destructive/40 bg-destructive/8"
+                : isDesbotado
+                ? "border-border/50 opacity-50"
+                : selecionada === alt.letra
+                ? "border-primary/50 bg-primary/5"
+                : "border-border hover:border-primary/40 hover:bg-muted/40 cursor-pointer"
+            }`}
+          >
+            <LetraBox letra={alt.letra} estado={estado} />
+            <span className={`flex-1 text-sm leading-relaxed ${isDesbotado ? "text-muted-foreground" : "text-foreground"}`}>
+              {alt.texto}
+            </span>
+            {isCorreto && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary mt-0.5" />}
+            {isErrado && <XCircle className="h-4 w-4 shrink-0 text-destructive mt-0.5" />}
+          </button>
+        )
+      })}
+
+      {verificada && (
+        <div className={`mt-1 rounded-lg border p-4 ${acertou ? "border-primary/30 bg-primary/5" : "border-destructive/30 bg-destructive/5"}`}>
+          <p className={`text-sm font-semibold ${acertou ? "text-primary" : "text-destructive"}`}>
+            Gabarito {correta} — {acertou ? "Correto" : "Incorreto"}
+          </p>
+          {explicacao && (
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{explicacao}</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function QuestaoCardExplorar({ questao, resposta, onSelecionar, onVerificar, onReset }: {
+  questao: Questao
+  resposta: RespostaState
+  onSelecionar: (letra: string) => void
+  onVerificar: () => void
+  onReset: () => void
+}) {
+  return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
-        {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/30 px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="bg-primary/15 text-primary border border-primary/20 font-medium">
@@ -152,69 +198,31 @@ function QuestaoCard({ questao, userId }: { questao: Questao; userId: string }) 
           </div>
         </div>
 
-        {/* Enunciado */}
         <div className="px-4 pt-4 pb-3">
           <p className="text-sm leading-relaxed text-foreground">{questao.enunciado}</p>
         </div>
 
-        {/* Alternativas */}
         <div className="space-y-2 px-4 pb-4">
-          {alternativas.map((alt) => {
-            const estado = getEstadoLetra(alt.letra)
-            const isCorreto = mostrarResposta && alt.letra === respostaCorreta
-            const isErrado = mostrarResposta && alt.letra === resposta && alt.letra !== respostaCorreta
-            const isDesbotado = mostrarResposta && alt.letra !== respostaCorreta && alt.letra !== resposta
-
-            return (
-              <button
-                key={alt.letra}
-                disabled={mostrarResposta}
-                onClick={() => !mostrarResposta && setResposta(alt.letra)}
-                className={`w-full flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-all duration-150 ${
-                  isCorreto
-                    ? "border-primary/40 bg-primary/8"
-                    : isErrado
-                    ? "border-destructive/40 bg-destructive/8"
-                    : isDesbotado
-                    ? "border-border/50 opacity-50"
-                    : resposta === alt.letra
-                    ? "border-primary/50 bg-primary/5"
-                    : "border-border hover:border-primary/40 hover:bg-muted/40 cursor-pointer"
-                }`}
-              >
-                <LetraBox letra={alt.letra} estado={estado} />
-                <span className={`flex-1 text-sm leading-relaxed ${isDesbotado ? "text-muted-foreground" : "text-foreground"}`}>
-                  {alt.texto}
-                </span>
-                {isCorreto && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary mt-0.5" />}
-                {isErrado && <XCircle className="h-4 w-4 shrink-0 text-destructive mt-0.5" />}
-              </button>
-            )
-          })}
-
-          {/* Gabarito + Explicação */}
-          {mostrarResposta && (
-            <div className={`mt-1 rounded-lg border p-4 ${acertou ? "border-primary/30 bg-primary/5" : "border-destructive/30 bg-destructive/5"}`}>
-              <p className={`text-sm font-semibold ${acertou ? "text-primary" : "text-destructive"}`}>
-                Gabarito {respostaCorreta} — {acertou ? "Correto" : "Incorreto"}
-              </p>
-              {explicacao && (
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{explicacao}</p>
-              )}
-            </div>
-          )}
-
-          {/* Ações */}
+          <Alternativas
+            questao={questao}
+            resposta={resposta}
+            onSelecionar={onSelecionar}
+            compact
+          />
           <div className="flex justify-end pt-1">
-            {!mostrarResposta ? (
-              <Button size="sm" onClick={handleVerificar} disabled={!resposta || verificando}>
-                {verificando
-                  ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Verificando...</>
+            {!resposta.verificada ? (
+              <Button
+                size="sm"
+                onClick={onVerificar}
+                disabled={!resposta.selecionada || resposta.verificando}
+              >
+                {resposta.verificando
+                  ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Verificando...</>
                   : "Verificar resposta"
                 }
               </Button>
             ) : (
-              <Button size="sm" variant="outline" onClick={handleTentarNovamente}>
+              <Button size="sm" variant="outline" onClick={onReset}>
                 <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Tentar novamente
               </Button>
             )}
@@ -240,11 +248,16 @@ export default function QuestoesPage() {
   const [banca, setBanca] = useState("todas")
   const [page, setPage] = useState(1)
 
+  const [modo, setModo] = useState<Modo>("resolver")
+  const [modoFoco, setModoFoco] = useState(false)
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [pendingLastIndex, setPendingLastIndex] = useState(false)
+  const [respostas, setRespostas] = useState<Record<string, RespostaState>>({})
+
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) setUserId(user.id)
-
       const res = await fetch("/api/questions/filtros")
       const data = await res.json()
       setFiltros(data)
@@ -271,142 +284,376 @@ export default function QuestoesPage() {
 
   useEffect(() => { fetchQuestoes() }, [fetchQuestoes])
 
+  useEffect(() => {
+    if (pendingLastIndex && questoes.length > 0) {
+      setCurrentIndex(questoes.length - 1)
+      setPendingLastIndex(false)
+    }
+  }, [questoes, pendingLastIndex])
+
   const handleLimparFiltros = () => {
-    setSubjectId("todas"); setDificuldade("todas")
-    setBanca("todas"); setSearchTerm(""); setPage(1)
+    setSubjectId("todas")
+    setDificuldade("todas")
+    setBanca("todas")
+    setSearchTerm("")
+    setPage(1)
+    setCurrentIndex(0)
+  }
+
+  const handleModo = (novoModo: Modo) => {
+    setModo(novoModo)
+    setPage(1)
+    setCurrentIndex(0)
+    setModoFoco(false)
   }
 
   const temFiltrosAtivos = subjectId !== "todas" || dificuldade !== "todas" || banca !== "todas"
 
-  return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Banco de Questões</h1>
-        <p className="text-muted-foreground text-sm">
-          {pagination.total > 0
-            ? `${pagination.total.toLocaleString("pt-BR")} questões organizadas por disciplina e tema`
-            : "Questões organizadas por disciplina e tema"}
-        </p>
-      </div>
+  // --- Resolver mode ---
+  const questaoAtual = questoes[currentIndex]
+  const globalQuestionNumber = (page - 1) * 10 + currentIndex + 1
+  const respostaAtual: RespostaState = questaoAtual
+    ? (respostas[questaoAtual.id] ?? emptyResposta)
+    : emptyResposta
+  const isFirst = globalQuestionNumber <= 1
+  const isLast = globalQuestionNumber >= pagination.total
 
-      {/* Busca + botão filtros avançados */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por tema ou palavra-chave..."
-            value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
-            className="pl-10"
-          />
-        </div>
+  const handleSelecionar = (questaoId: string, letra: string) => {
+    setRespostas((prev) => {
+      const current = prev[questaoId] ?? emptyResposta
+      if (current.verificada) return prev
+      return { ...prev, [questaoId]: { ...current, selecionada: letra } }
+    })
+  }
+
+  const handleVerificar = async (questaoId: string, selecionada: string) => {
+    if (!userId || !selecionada) return
+
+    setRespostas((prev) => ({
+      ...prev,
+      [questaoId]: { ...(prev[questaoId] ?? emptyResposta), verificando: true },
+    }))
+
+    const res = await fetch("/api/simulados/resposta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, questionId: questaoId, simuladoId: null, resposta: selecionada }),
+    })
+    const data = await res.json()
+
+    const { data: qData } = await supabase
+      .from("questions").select("explicacao").eq("id", questaoId).single()
+
+    setRespostas((prev) => ({
+      ...prev,
+      [questaoId]: {
+        ...(prev[questaoId] ?? emptyResposta),
+        verificando: false,
+        verificada: true,
+        acertou: data.acertou,
+        correta: data.resposta_correta,
+        explicacao: qData?.explicacao ?? null,
+      },
+    }))
+  }
+
+  const handleReset = (questaoId: string) => {
+    setRespostas((prev) => ({ ...prev, [questaoId]: emptyResposta }))
+  }
+
+  const handleAnterior = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1)
+    } else if (page > 1) {
+      setPendingLastIndex(true)
+      setPage((p) => p - 1)
+    }
+  }
+
+  const handleProxima = () => {
+    if (currentIndex < questoes.length - 1) {
+      setCurrentIndex(currentIndex + 1)
+    } else if (page < pagination.totalPages) {
+      setCurrentIndex(0)
+      setPage((p) => p + 1)
+    }
+  }
+
+  const NavBar = () => (
+    <div className="flex items-center justify-between pt-2">
+      <Button variant="ghost" onClick={handleAnterior} disabled={isFirst || loading} className="gap-1.5">
+        <ChevronLeft className="h-4 w-4" />
+        Anterior
+      </Button>
+      {!respostaAtual.verificada ? (
         <Button
-          variant="outline"
-          onClick={() => setShowFiltrosAvancados(!showFiltrosAvancados)}
-          className={temFiltrosAtivos ? "border-primary/50 text-primary" : ""}
+          onClick={() => handleVerificar(questaoAtual.id, respostaAtual.selecionada)}
+          disabled={!respostaAtual.selecionada || respostaAtual.verificando}
         >
-          <SlidersHorizontal className="mr-2 h-4 w-4" />
-          Filtros
-          {temFiltrosAtivos && (
-            <span className="ml-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground font-bold">
-              {(subjectId !== "todas" ? 1 : 0) + (dificuldade !== "todas" ? 1 : 0) + (banca !== "todas" ? 1 : 0)}
-            </span>
-          )}
+          {respostaAtual.verificando
+            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verificando...</>
+            : "Responder"
+          }
         </Button>
-      </div>
-
-      {/* Filtros avançados */}
-      {showFiltrosAvancados && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="grid gap-4 sm:grid-cols-4">
-              <div className="space-y-2">
-                <Label>Disciplina</Label>
-                <Select value={subjectId} onValueChange={(v) => { setSubjectId(v); setPage(1) }}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Todas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todas">Todas</SelectItem>
-                    {loadingFiltros
-                      ? <SelectItem value="_loading" disabled>Carregando...</SelectItem>
-                      : filtros.subjects.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                        ))
-                    }
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Dificuldade</Label>
-                <Select value={dificuldade} onValueChange={(v) => { setDificuldade(v); setPage(1) }}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Todas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todas">Todas</SelectItem>
-                    {filtros.dificuldades.map((d) => (
-                      <SelectItem key={d} value={d}>{d}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Banca</Label>
-                <Select value={banca} onValueChange={(v) => { setBanca(v); setPage(1) }}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Todas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todas">Todas</SelectItem>
-                    {filtros.bancas.map((b) => (
-                      <SelectItem key={b} value={b}>{b}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-end">
-                <Button variant="outline" onClick={handleLimparFiltros} className="w-full">
-                  Limpar filtros
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Lista de questões */}
-      {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : questoes.length === 0 ? (
-        <div className="flex items-center justify-center h-32">
-          <p className="text-muted-foreground text-sm">Nenhuma questão encontrada com esses filtros.</p>
-        </div>
       ) : (
-        <div className="space-y-4">
-          {questoes.map((questao) => (
-            <QuestaoCard key={questao.id} questao={questao} userId={userId} />
-          ))}
-        </div>
-      )}
-
-      {/* Paginação */}
-      {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button variant="outline" onClick={() => setPage((p) => p - 1)} disabled={page === 1 || loading}>
-            Anterior
-          </Button>
-          <span className="px-4 text-sm text-muted-foreground">
-            Página {pagination.page} de {pagination.totalPages}
-          </span>
-          <Button variant="outline" onClick={() => setPage((p) => p + 1)} disabled={page === pagination.totalPages || loading}>
-            Próximo
-          </Button>
-        </div>
+        <Button onClick={handleProxima} disabled={isLast || loading}>
+          Próxima →
+        </Button>
       )}
     </div>
+  )
+
+  return (
+    <>
+      {/* Modo Foco overlay */}
+      {modoFoco && questaoAtual && (
+        <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
+          <div className="flex justify-end p-4 sm:p-6">
+            <button
+              onClick={() => setModoFoco(false)}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Sair do modo foco
+            </button>
+          </div>
+          <div className="mx-auto max-w-2xl px-4 pb-12">
+            <p className="mb-6 text-center text-xs font-semibold tracking-widest uppercase text-muted-foreground">
+              {questaoAtual.subject_name}
+              {questaoAtual.topic_name && ` · ${questaoAtual.topic_name}`}
+            </p>
+            <p className="mb-8 text-center text-lg font-medium leading-relaxed text-foreground">
+              {questaoAtual.enunciado}
+            </p>
+            <Alternativas
+              questao={questaoAtual}
+              resposta={respostaAtual}
+              onSelecionar={(l) => handleSelecionar(questaoAtual.id, l)}
+            />
+            <NavBar />
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Explore questões</h1>
+            <p className="text-sm text-muted-foreground">Estudo livre. Você no controle.</p>
+          </div>
+          {modo === "resolver" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setModoFoco(true)}
+              disabled={!questaoAtual || loading}
+              className="shrink-0 gap-2"
+            >
+              <Maximize2 className="h-4 w-4" />
+              Modo foco
+            </Button>
+          )}
+        </div>
+
+        {/* Tabs: Resolver / Explorar */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleModo("resolver")}
+            className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors cursor-pointer ${
+              modo === "resolver"
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5"
+            }`}
+          >
+            <PenLine className="h-3.5 w-3.5" />
+            Resolver questões
+          </button>
+          <button
+            onClick={() => handleModo("explorar")}
+            className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors cursor-pointer ${
+              modo === "explorar"
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5"
+            }`}
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            Explorar questões
+          </button>
+        </div>
+
+        {/* Busca + botão filtros avançados */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por tema ou palavra-chave..."
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setPage(1); setCurrentIndex(0) }}
+              className="pl-10"
+            />
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => setShowFiltrosAvancados(!showFiltrosAvancados)}
+            className={temFiltrosAtivos ? "border-primary/50 text-primary" : ""}
+          >
+            <SlidersHorizontal className="mr-2 h-4 w-4" />
+            Filtros
+            {temFiltrosAtivos && (
+              <span className="ml-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground font-bold">
+                {(subjectId !== "todas" ? 1 : 0) + (dificuldade !== "todas" ? 1 : 0) + (banca !== "todas" ? 1 : 0)}
+              </span>
+            )}
+          </Button>
+        </div>
+
+        {/* Filtros avançados */}
+        {showFiltrosAvancados && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="grid gap-4 sm:grid-cols-4">
+                <div className="space-y-2">
+                  <Label>Disciplina</Label>
+                  <Select value={subjectId} onValueChange={(v) => { setSubjectId(v); setPage(1); setCurrentIndex(0) }}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Todas" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todas">Todas</SelectItem>
+                      {loadingFiltros
+                        ? <SelectItem value="_loading" disabled>Carregando...</SelectItem>
+                        : filtros.subjects.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          ))
+                      }
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Dificuldade</Label>
+                  <Select value={dificuldade} onValueChange={(v) => { setDificuldade(v); setPage(1); setCurrentIndex(0) }}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Todas" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todas">Todas</SelectItem>
+                      {filtros.dificuldades.map((d) => (
+                        <SelectItem key={d} value={d}>{d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Banca</Label>
+                  <Select value={banca} onValueChange={(v) => { setBanca(v); setPage(1); setCurrentIndex(0) }}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Todas" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todas">Todas</SelectItem>
+                      {filtros.bancas.map((b) => (
+                        <SelectItem key={b} value={b}>{b}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end">
+                  <Button variant="outline" onClick={handleLimparFiltros} className="w-full">
+                    Limpar filtros
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Conteúdo */}
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : questoes.length === 0 ? (
+          <div className="flex items-center justify-center h-32">
+            <p className="text-sm text-muted-foreground">Nenhuma questão encontrada com esses filtros.</p>
+          </div>
+        ) : modo === "resolver" && questaoAtual ? (
+          /* ── Modo Resolver: uma questão por vez ── */
+          <Card className="overflow-hidden">
+            <CardContent className="p-0">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/30 px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-foreground">
+                    Questão {globalQuestionNumber} de {pagination.total}
+                  </span>
+                  {questaoAtual.dificuldade && (
+                    <Badge className={`border text-xs ${getDificuldadeColor(questaoAtual.dificuldade)}`}>
+                      {questaoAtual.dificuldade}
+                    </Badge>
+                  )}
+                  {(questaoAtual.banca || questaoAtual.ano) && (
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {[questaoAtual.banca, questaoAtual.ano].filter(Boolean).join(" · ")}
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {questaoAtual.subject_name}
+                  {questaoAtual.topic_name && ` · ${questaoAtual.topic_name}`}
+                </span>
+              </div>
+
+              <div className="px-4 pt-4 pb-3">
+                <p className="text-sm leading-relaxed text-foreground">{questaoAtual.enunciado}</p>
+              </div>
+
+              <div className="px-4 pb-4">
+                <Alternativas
+                  questao={questaoAtual}
+                  resposta={respostaAtual}
+                  onSelecionar={(l) => handleSelecionar(questaoAtual.id, l)}
+                  compact
+                />
+                <NavBar />
+              </div>
+            </CardContent>
+          </Card>
+        ) : modo === "explorar" ? (
+          /* ── Modo Explorar: lista de questões ── */
+          <>
+            <div className="space-y-4">
+              {questoes.map((questao) => {
+                const r = respostas[questao.id] ?? emptyResposta
+                return (
+                  <QuestaoCardExplorar
+                    key={questao.id}
+                    questao={questao}
+                    resposta={r}
+                    onSelecionar={(l) => handleSelecionar(questao.id, l)}
+                    onVerificar={() => handleVerificar(questao.id, r.selecionada)}
+                    onReset={() => handleReset(questao.id)}
+                  />
+                )
+              })}
+            </div>
+
+            {pagination.totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setPage((p) => p - 1)}
+                  disabled={page === 1 || loading}
+                >
+                  Anterior
+                </Button>
+                <span className="px-4 text-sm text-muted-foreground">
+                  Página {pagination.page} de {pagination.totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={page === pagination.totalPages || loading}
+                >
+                  Próximo
+                </Button>
+              </div>
+            )}
+          </>
+        ) : null}
+      </div>
+    </>
   )
 }
