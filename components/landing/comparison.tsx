@@ -21,7 +21,7 @@ export function Comparison() {
               style={{ fontFamily: "'Fraunces', Georgia, serif" }}
             >
               Diferente de cursinho.{" "}
-              <em className="not-italic text-primary">Feito pra 2025.</em>
+              <em className="not-italic text-primary">Feito pra 2026.</em>
             </h2>
           </div>
         </FadeIn>
