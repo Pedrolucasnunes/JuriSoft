@@ -1,22 +1,25 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Eye, EyeOff, Check } from "lucide-react"
+import { ArrowLeft, Eye, EyeOff, Check, Mail } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
+type Step = "form" | "verify" | "success"
+
 export default function CadastroPage() {
-  const router = useRouter()
+  const [step, setStep] = useState<Step>("form")
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
-  const [sucesso, setSucesso] = useState(false)
+  const [emailCadastro, setEmailCadastro] = useState("")
+  const [otp, setOtp] = useState(["", "", "", "", "", ""])
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([])
 
   const passwordRequirements = [
     { label: "Mínimo 8 caracteres", valid: password.length >= 8 },
@@ -26,7 +29,7 @@ export default function CadastroPage() {
 
   const senhaValida = passwordRequirements.every((r) => r.valid)
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: { preventDefault(): void; currentTarget: HTMLFormElement }) => {
     e.preventDefault()
     setError(null)
 
@@ -61,11 +64,76 @@ export default function CadastroPage() {
       return
     }
 
+    setEmailCadastro(email)
     await supabase.auth.signOut()
-    setSucesso(true)
+    setStep("verify")
   }
 
-  if (sucesso) {
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return
+    const next = [...otp]
+    next[index] = value.slice(-1)
+    setOtp(next)
+    if (value && index < 5) {
+      inputsRef.current[index + 1]?.focus()
+    }
+  }
+
+  const handleOtpKeyDown = (index: number, e: { key: string }) => {
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      inputsRef.current[index - 1]?.focus()
+    }
+  }
+
+  const handleOtpPaste = (e: { clipboardData: DataTransfer; preventDefault(): void }) => {
+    const text = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)
+    if (!text) return
+    e.preventDefault()
+    const next = [...otp]
+    text.split("").forEach((char, i) => { next[i] = char })
+    setOtp(next)
+    inputsRef.current[Math.min(text.length, 5)]?.focus()
+  }
+
+  const handleVerifyOtp = async (e: { preventDefault(): void }) => {
+    e.preventDefault()
+    setError(null)
+    const token = otp.join("")
+    if (token.length < 6) {
+      setError("Digite os 6 dígitos do código enviado.")
+      return
+    }
+
+    setIsLoading(true)
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: emailCadastro,
+      token,
+      type: "signup",
+    })
+    setIsLoading(false)
+
+    if (verifyError) {
+      setError("Código inválido ou expirado. Solicite um novo código.")
+      return
+    }
+
+    await supabase.auth.signOut()
+    setStep("success")
+  }
+
+  const handleResend = async () => {
+    setError(null)
+    setOtp(["", "", "", "", "", ""])
+    const { error: resendError } = await supabase.auth.resend({
+      type: "signup",
+      email: emailCadastro,
+    })
+    if (resendError) {
+      setError("Não foi possível reenviar o código. Tente novamente.")
+    }
+  }
+
+  if (step === "success") {
     return (
       <div className="flex min-h-screen flex-col bg-background">
         <div className="flex flex-1 items-center justify-center px-4 py-12">
@@ -75,16 +143,91 @@ export default function CadastroPage() {
                 <Check className="h-8 w-8 text-primary" />
               </div>
               <CardTitle className="text-2xl font-bold text-foreground">
-                Conta criada!
+                Conta ativada!
               </CardTitle>
               <CardDescription>
-                Enviamos um e-mail de confirmação. Verifique sua caixa de entrada e clique no link para ativar sua conta.
+                Seu e-mail foi verificado com sucesso. Agora você pode fazer login.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Button asChild className="w-full">
                 <Link href="/login">Ir para o login</Link>
               </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
+  if (step === "verify") {
+    return (
+      <div className="flex min-h-screen flex-col bg-background">
+        <div className="absolute left-4 top-4 lg:left-8 lg:top-8">
+          <button
+            onClick={() => setStep("form")}
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar
+          </button>
+        </div>
+
+        <div className="flex flex-1 items-center justify-center px-4 py-12">
+          <Card className="w-full max-w-md border-border">
+            <CardHeader className="space-y-4 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                <Mail className="h-8 w-8 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-2xl font-bold text-foreground">
+                  Verifique seu e-mail
+                </CardTitle>
+                <CardDescription className="mt-2">
+                  Enviamos um código de 6 dígitos para{" "}
+                  <span className="font-medium text-foreground">{emailCadastro}</span>
+                </CardDescription>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              <form onSubmit={handleVerifyOtp} className="space-y-6">
+                <div className="space-y-2">
+                  <Label className="text-center block">Código de verificação</Label>
+                  <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
+                    {otp.map((digit, i) => (
+                      <input
+                        key={i}
+                        ref={(el) => { inputsRef.current[i] = el }}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleOtpChange(i, e.target.value)}
+                        onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                        className="h-12 w-10 rounded-md border border-input bg-input text-center text-lg font-semibold focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {error && <p className="text-sm text-destructive text-center">{error}</p>}
+
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Verificando..." : "Verificar código"}
+                </Button>
+              </form>
+
+              <p className="mt-4 text-center text-sm text-muted-foreground">
+                Não recebeu o código?{" "}
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  className="font-medium text-primary hover:underline"
+                >
+                  Reenviar
+                </button>
+              </p>
             </CardContent>
           </Card>
         </div>
