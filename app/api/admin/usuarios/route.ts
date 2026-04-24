@@ -1,18 +1,22 @@
+import { requireAdmin } from "@/lib/auth-server"
 import { supabaseAdmin } from "@/lib/supabase-admin"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function GET(req: NextRequest) {
+  const { error } = await requireAdmin()
+  if (error) return error
+
   const { searchParams } = new URL(req.url)
   const page = Math.max(1, Number(searchParams.get("page") ?? "1"))
   const limit = 20
   const offset = (page - 1) * limit
 
-  const { data: users, error, count } = await supabaseAdmin
+  const { data: users, error: dbError, count } = await supabaseAdmin
     .from("users")
     .select("id, role", { count: "exact" })
     .range(offset, offset + limit - 1)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
 
   const usersWithStats = await Promise.all(
     (users ?? []).map(async (u) => {

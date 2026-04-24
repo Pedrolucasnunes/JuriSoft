@@ -1,7 +1,11 @@
+import { requireAdmin } from "@/lib/auth-server"
 import { supabaseAdmin } from "@/lib/supabase-admin"
 import { NextResponse } from "next/server"
 
 export async function GET() {
+  const { error } = await requireAdmin()
+  if (error) return error
+
   const { count: totalUsuarios } = await supabaseAdmin
     .from("users")
     .select("id", { count: "exact", head: true })

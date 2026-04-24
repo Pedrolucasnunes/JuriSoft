@@ -1,19 +1,10 @@
-import { supabaseAdmin } from "@/lib/supabase-admin"
-import { NextRequest, NextResponse } from "next/server"
+import { requireAdmin } from "@/lib/auth-server"
+import { NextResponse } from "next/server"
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const userId = searchParams.get("userId")
+export async function GET() {
+  const { error } = await requireAdmin()
 
-  if (!userId) {
-    return NextResponse.json({ isAdmin: false })
-  }
+  if (error) return error
 
-  const { data } = await supabaseAdmin
-    .from("users")
-    .select("role")
-    .eq("id", userId)
-    .single()
-
-  return NextResponse.json({ isAdmin: data?.role === "admin" })
+  return NextResponse.json({ isAdmin: true })
 }

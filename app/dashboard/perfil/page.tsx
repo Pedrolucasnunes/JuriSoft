@@ -22,6 +22,7 @@ export default function PerfilPage() {
   const [email, setEmail] = useState("")
   const [dataCadastro, setDataCadastro] = useState("")
   const [novaSenha, setNovaSenha] = useState("")
+  const [confirmarSenha, setConfirmarSenha] = useState("")
   const [stats, setStats] = useState({ simuladosFeitos: 0, questoesResolvidas: 0, taxaAcerto: 0 })
 
   useEffect(() => {
@@ -76,8 +77,13 @@ export default function PerfilPage() {
       const updates: any = { data: { nome, full_name: nome } }
 
       if (novaSenha) {
-        if (novaSenha.length < 6) {
-          toast.error("A nova senha deve ter pelo menos 6 caracteres.")
+        if (novaSenha.length < 8) {
+          toast.error("A nova senha deve ter pelo menos 8 caracteres.")
+          setSalvando(false)
+          return
+        }
+        if (novaSenha !== confirmarSenha) {
+          toast.error("As senhas não coincidem.")
           setSalvando(false)
           return
         }
@@ -92,6 +98,7 @@ export default function PerfilPage() {
         toast.success("Perfil atualizado com sucesso!")
         setIsEditing(false)
         setNovaSenha("")
+        setConfirmarSenha("")
       }
     } catch {
       toast.error("Erro inesperado ao salvar.")
@@ -126,7 +133,7 @@ export default function PerfilPage() {
                 </div>
                 {isEditing ? (
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => { setIsEditing(false); setNovaSenha("") }} disabled={salvando}>
+                    <Button variant="outline" onClick={() => { setIsEditing(false); setNovaSenha(""); setConfirmarSenha("") }} disabled={salvando}>
                       Cancelar
                     </Button>
                     <Button onClick={handleSalvar} disabled={salvando}>
@@ -169,22 +176,42 @@ export default function PerfilPage() {
 
               <div>
                 <h4 className="mb-4 font-medium text-foreground">Alterar Senha</h4>
-                <div className="space-y-2 max-w-sm">
-                  <Label htmlFor="nova-senha">Nova senha</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="nova-senha"
-                      type="password"
-                      placeholder="Digite a nova senha"
-                      value={novaSenha}
-                      onChange={(e) => setNovaSenha(e.target.value)}
-                      disabled={!isEditing}
-                      className="pl-10"
-                    />
+                <div className="grid gap-4 sm:grid-cols-2 max-w-xl">
+                  <div className="space-y-2">
+                    <Label htmlFor="nova-senha">Nova senha</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="nova-senha"
+                        type="password"
+                        placeholder="Mínimo 8 caracteres"
+                        value={novaSenha}
+                        onChange={(e) => setNovaSenha(e.target.value)}
+                        disabled={!isEditing}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmar-senha">Confirmar nova senha</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="confirmar-senha"
+                        type="password"
+                        placeholder="Repita a nova senha"
+                        value={confirmarSenha}
+                        onChange={(e) => setConfirmarSenha(e.target.value)}
+                        disabled={!isEditing}
+                        className={`pl-10 ${isEditing && confirmarSenha && novaSenha !== confirmarSenha ? "border-destructive" : ""}`}
+                      />
+                    </div>
+                    {isEditing && confirmarSenha && novaSenha !== confirmarSenha && (
+                      <p className="text-xs text-destructive">As senhas não coincidem</p>
+                    )}
                   </div>
                   {isEditing && (
-                    <p className="text-xs text-muted-foreground">Deixe em branco para manter a senha atual</p>
+                    <p className="text-xs text-muted-foreground sm:col-span-2">Deixe em branco para manter a senha atual</p>
                   )}
                 </div>
               </div>

@@ -1,7 +1,11 @@
+import { requireAdmin } from "@/lib/auth-server"
 import { supabaseAdmin } from "@/lib/supabase-admin"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(req: NextRequest) {
+  const { error } = await requireAdmin()
+  if (error) return error
+
   const body = await req.json()
   const { questoes } = body
 
@@ -19,7 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Nenhuma questão válida encontrada" }, { status: 400 })
   }
 
-  const { error } = await supabaseAdmin
+  const { error: dbError } = await supabaseAdmin
     .from("questions")
     .insert(validas.map((q: any) => ({
       enunciado: q.enunciado,
@@ -37,9 +41,9 @@ export async function POST(req: NextRequest) {
       incidencia_prova: q.incidencia_prova ? Number(q.incidencia_prova) : null,
     })))
 
-  if (error) {
-    console.error("[importar] Erro:", error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (dbError) {
+    console.error("[importar] Erro:", dbError.message)
+    return NextResponse.json({ error: dbError.message }, { status: 500 })
   }
 
   return NextResponse.json({ importadas: validas.length }, { status: 201 })

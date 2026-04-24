@@ -1,15 +1,26 @@
+import { requireAdmin } from "@/lib/auth-server"
 import { supabaseAdmin } from "@/lib/supabase-admin"
 import { NextRequest, NextResponse } from "next/server"
 
+const VALID_ROLES = ["user", "admin", "blocked"] as const
+type Role = typeof VALID_ROLES[number]
+
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { error } = await requireAdmin()
+  if (error) return error
+
   const { id } = await params
   const { role } = await req.json()
 
-  const { error } = await supabaseAdmin
+  if (!VALID_ROLES.includes(role as Role)) {
+    return NextResponse.json({ error: "Role inválido" }, { status: 400 })
+  }
+
+  const { error: dbError } = await supabaseAdmin
     .from("users")
     .update({ role })
     .eq("id", id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }

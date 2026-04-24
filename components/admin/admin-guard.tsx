@@ -25,8 +25,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
           return
         }
 
-        // ✅ Passa userId — supabaseAdmin ignora RLS
-        const res = await fetch(`/api/admin/check?userId=${user.id}`)
+        const res = await fetch("/api/admin/check")
         const { isAdmin } = await res.json()
 
         if (!isAdmin) {

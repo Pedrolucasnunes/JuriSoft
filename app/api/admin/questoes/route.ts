@@ -1,7 +1,11 @@
+import { requireAdmin } from "@/lib/auth-server"
 import { supabaseAdmin } from "@/lib/supabase-admin"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function GET(req: NextRequest) {
+  const { error } = await requireAdmin()
+  if (error) return error
+
   const { searchParams } = new URL(req.url)
   const page = Math.max(1, Number(searchParams.get("page") ?? "1"))
   const busca = searchParams.get("busca") ?? ""
@@ -19,9 +23,9 @@ export async function GET(req: NextRequest) {
 
   query = query.range(offset, offset + limit - 1).order("created_at", { ascending: false })
 
-  const { data, error, count } = await query
+  const { data, error: dbError, count } = await query
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
 
   const subjectIds = [...new Set((data ?? []).map(q => q.subject_id).filter(Boolean))]
   const { data: subjects } = await supabaseAdmin
@@ -42,6 +46,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const { error } = await requireAdmin()
+  if (error) return error
+
   const body = await req.json()
   const { enunciado, alternativa_a, alternativa_b, alternativa_c, alternativa_d,
     resposta_correta, dificuldade, banca, ano, subject_id, topic_id, explicacao } = body
@@ -50,7 +57,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Campos obrigatórios faltando" }, { status: 400 })
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error: dbError } = await supabaseAdmin
     .from("questions")
     .insert({
       enunciado, alternativa_a, alternativa_b, alternativa_c, alternativa_d,
@@ -58,7 +65,7 @@ export async function POST(req: NextRequest) {
     })
     .select("id").single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
 
   return NextResponse.json({ id: data.id }, { status: 201 })
 }
