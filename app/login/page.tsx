@@ -30,7 +30,7 @@ export default function LoginPage() {
     const email = formData.get("email") as string
     const password = formData.get("password") as string
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    const { error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -41,8 +41,7 @@ export default function LoginPage() {
       return
     }
 
-    // ✅ Usa a API admin/check que usa supabaseAdmin — ignora RLS
-    const res = await fetch(`/api/admin/check?userId=${authData.user.id}`)
+    const res = await fetch("/api/admin/check")
     const { isAdmin } = await res.json()
 
     if (isAdmin) {
