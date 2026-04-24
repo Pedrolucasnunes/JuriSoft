@@ -237,16 +237,15 @@ export default function DashboardPage() {
                 Seu progresso rumo à aprovação
               </span>
               <h2 className="text-2xl sm:text-3xl font-bold leading-tight">
-                Você está a{" "}
-                <span className={getTextColor(taxaGeral)}>{taxaGeral.toFixed(1)}%</span>{" "}
-                da aprovação
+                Sua taxa de acerto é{" "}
+                <span className="text-primary">{taxaGeral.toFixed(1)}%</span>
               </h2>
               <p className="text-sm text-muted-foreground">
-                Meta de aprovação:{" "}
+                Meta para aprovação:{" "}
                 <strong className="text-foreground">{META}% de acerto</strong>.{" "}
                 {taxaGeral >= META
                   ? "Parabéns! Você atingiu a meta."
-                  : "Continue treinando para chegar lá."}
+                  : `Faltam ${(META - taxaGeral).toFixed(1)}% para chegar lá.`}
               </p>
             </div>
             <div className="hidden sm:flex items-center gap-1 text-sm font-semibold text-primary shrink-0 pt-1">

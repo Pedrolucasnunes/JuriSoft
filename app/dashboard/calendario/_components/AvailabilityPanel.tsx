@@ -62,6 +62,12 @@ function slotMinutes(slot: TimeSlot): number {
   return Math.max((eh * 60 + em) - (sh * 60 + sm), 0)
 }
 
+function isSlotValid(slot: TimeSlot): boolean {
+  const [sh, sm] = slot.start_time.split(":").map(Number)
+  const [eh, em] = slot.end_time.split(":").map(Number)
+  return (eh * 60 + em) > (sh * 60 + sm)
+}
+
 function calcWeeklyHours(avail: DayAvailability[]): number {
   let total = 0
   for (const day of avail) {
@@ -198,12 +204,20 @@ export function AvailabilityPanel({ availability, onSaveAndGenerate, onClose }: 
 
   const setSlot = (dayIdx: number, slotIdx: number, field: keyof TimeSlot, val: string) =>
     setLocal((p) =>
-      p.map((d, i) =>
-        i !== dayIdx ? d : {
+      p.map((d, i) => {
+        if (i !== dayIdx) return d
+        return {
           ...d,
-          slots: d.slots.map((s, si) => si !== slotIdx ? s : { ...s, [field]: val }),
+          slots: d.slots.map((s, si) => {
+            if (si !== slotIdx) return s
+            const updated = { ...s, [field]: val }
+            if (field === "start_time" && !isSlotValid(updated)) {
+              updated.end_time = snapToOption(addMinutes(val, 60))
+            }
+            return updated
+          }),
         }
-      )
+      })
     )
 
   const addSlot = (dayIdx: number) =>
@@ -229,8 +243,9 @@ export function AvailabilityPanel({ availability, onSaveAndGenerate, onClose }: 
   const applyPreset = (preset: Preset) => setLocal(preset.apply())
 
   // ── Stats ──────────────────────────────────────────────────────
-  const weeklyHours = calcWeeklyHours(local)
-  const activeDays  = local.filter((d) => d.enabled).length
+  const weeklyHours     = calcWeeklyHours(local)
+  const activeDays      = local.filter((d) => d.enabled).length
+  const hasInvalidSlots = local.some((d) => d.enabled && d.slots.some((s) => !isSlotValid(s)))
 
   // ── Save + generate ────────────────────────────────────────────
   async function handleSave() {
@@ -364,6 +379,13 @@ export function AvailabilityPanel({ availability, onSaveAndGenerate, onClose }: 
                         onChange={(v) => setSlot(i, si, "end_time", v)}
                       />
 
+                      {/* Validation */}
+                      {!isSlotValid(slot) && (
+                        <span className="pb-2 text-xs font-medium text-destructive">
+                          fim ≤ início
+                        </span>
+                      )}
+
                       {/* Remove */}
                       <button
                         type="button"
@@ -428,7 +450,7 @@ export function AvailabilityPanel({ availability, onSaveAndGenerate, onClose }: 
         <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border">
           <Button
             onClick={handleSave}
-            disabled={saving || weeklyHours === 0}
+            disabled={saving || weeklyHours === 0 || hasInvalidSlots}
             className="flex-1 sm:flex-none gap-2 transition-all duration-150 active:scale-[0.97]"
           >
             {saving

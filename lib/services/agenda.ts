@@ -33,13 +33,6 @@ function getDayOfWeek(dateStr: string): number {
   return new Date(y, m - 1, d).getDay()
 }
 
-function addMinutesToTime(time: string, minutes: number): string {
-  const [h, m] = time.split(":").map(Number)
-  const total = h * 60 + m + minutes
-  const hh = Math.floor(total / 60) % 24
-  const mm = total % 60
-  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`
-}
 
 /** Retorna horário a ~50% da janela disponível (para segunda sessão) */
 function midpointTime(start: string, end: string): string {
@@ -85,7 +78,8 @@ function classificar(
 export function gerarEventos(
   userId:       string,
   desempenho:   { subject_id: string; nome: string; taxa_acerto: number }[],
-  availability: UserAvailability[] = []
+  availability: UserAvailability[] = [],
+  startDate?:   string   // YYYY-MM-DD — padrão: segunda da semana atual
 ): AgendaEvent[] {
   const { criticas, medias, boas } = classificar(desempenho)
 
@@ -123,9 +117,14 @@ export function gerarEventos(
   }
 
   const dateStr = (offsetDays: number): string => {
-    const d = new Date()
-    d.setDate(d.getDate() + offsetDays)
-    return d.toISOString().split("T")[0]
+    const base = startDate
+      ? (() => { const [y, m, d] = startDate.split("-").map(Number); return new Date(y, m - 1, d) })()
+      : new Date()
+    base.setDate(base.getDate() + offsetDays)
+    const y = base.getFullYear()
+    const m = String(base.getMonth() + 1).padStart(2, "0")
+    const d = String(base.getDate()).padStart(2, "0")
+    return `${y}-${m}-${d}`
   }
 
   // Resolve horários da sessão com base na disponibilidade do dia
@@ -158,6 +157,9 @@ export function gerarEventos(
   for (let day = 0; day < 7; day++) {
     const date = dateStr(day)
     const { session1, session2, hasAvail } = resolveSessionTimes(date)
+
+    // Pula dias sem disponibilidade configurada (só quando o usuário definiu horários)
+    if (!hasAvail && availability.length > 0) continue
 
     // ── Dia 4 (index 3): Simulado completo ──────────────────────────
     if (day === 3) {

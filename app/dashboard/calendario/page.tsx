@@ -6,8 +6,8 @@ import { Badge }  from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Sparkles, BookOpen, FileText, RotateCcw, Trophy,
-  ChevronLeft, ChevronRight, Loader2, CalendarDays,
-  Brain, AlertTriangle, Clock, Settings2,
+  ChevronLeft, ChevronRight, ChevronDown, Loader2, CalendarDays,
+  Brain, AlertTriangle, Clock, Settings2, Info,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -23,6 +23,7 @@ import type { DayAvailability }              from "./_components/AvailabilityPan
 // ─────────────────────────────────────────────────────────────────────────────
 const MONTHS_PT      = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]
 const WEEKDAYS_SHORT = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"]
+const WEEKDAYS_LONG  = ["Domingo","Segunda-feira","Terça-feira","Quarta-feira","Quinta-feira","Sexta-feira","Sábado"]
 
 const DEFAULT_AVAIL: DayAvailability = {
   enabled: false,
@@ -53,9 +54,18 @@ function todayStr(): string {
   return new Date().toISOString().split("T")[0]
 }
 
+function getMondayOf(d: Date): Date {
+  const dow  = d.getDay()
+  const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  copy.setDate(copy.getDate() + (dow === 0 ? -6 : 1 - dow))
+  return copy
+}
+
 function weekStartFor(offsetWeeks: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + offsetWeeks * 7)
+  const d   = new Date()
+  const dow = d.getDay()                       // 0=Dom … 6=Sáb
+  const toMonday = dow === 0 ? -6 : 1 - dow   // quantos dias voltar até segunda
+  d.setDate(d.getDate() + toMonday + offsetWeeks * 7)
   return d.toISOString().split("T")[0]
 }
 
@@ -92,7 +102,7 @@ function MobileList({
                 <span className="text-base font-black leading-none">{d}</span>
               </div>
               <span className={`text-sm font-semibold ${isT ? "text-primary" : "text-foreground"}`}>
-                {isT ? "Hoje" : `${WEEKDAYS_SHORT[dow]}-feira`}
+                {isT ? "Hoje" : WEEKDAYS_LONG[dow]}
                 <span className="ml-1.5 text-xs font-normal text-muted-foreground capitalize">
                   {d} {MONTHS_PT[m - 1]}
                 </span>
@@ -106,12 +116,19 @@ function MobileList({
                 {evts.map((e) => {
                   const cfg  = TYPE_CONFIG[e.type] ?? TYPE_CONFIG.study
                   const Icon = cfg.icon
+                  const now  = new Date()
+                  const todayStr = now.toISOString().split("T")[0]
+                  const [eh, em] = e.time.split(":").map(Number)
+                  const isPast = e.date < todayStr || (
+                    e.date === todayStr && (eh * 60 + em) < now.getHours() * 60 + now.getMinutes()
+                  )
                   return (
                     <button
                       key={e.id}
                       onClick={() => onEventClick(e)}
                       className={`w-full text-left flex gap-3 rounded-lg border border-l-4
-                        bg-card hover:bg-muted/40 transition-colors p-3 ${cfg.borderL}`}
+                        bg-card hover:bg-muted/40 transition-colors p-3 ${cfg.borderL}
+                        ${isPast ? "opacity-50" : ""}`}
                     >
                       <div className="flex w-12 shrink-0 flex-col items-center">
                         <span className="font-mono text-xs text-muted-foreground">
@@ -165,6 +182,8 @@ export default function CalendarioPage() {
   const [availByDay,     setAvailByDay]     = useState<DayAvailability[]>(
     Array.from({ length: 7 }, () => ({ ...DEFAULT_AVAIL, slots: [{ start_time: "19:00", end_time: "22:00" }] }))
   )
+  const [lastGenerated,  setLastGenerated]  = useState<string | null>(null)
+  const [showRules,      setShowRules]      = useState(false)
 
   const today     = todayStr()
   const weekStart = weekStartFor(weekOffset)
@@ -225,6 +244,10 @@ export default function CalendarioPage() {
 
   useEffect(() => { loadAvailability() }, [loadAvailability])
   useEffect(() => { loadEvents() },       [loadEvents])
+  useEffect(() => {
+    const saved = localStorage.getItem("agenda_last_generated")
+    if (saved) setLastGenerated(saved)
+  }, [])
 
   // ── Generate plan ─────────────────────────────────────────────
   async function handleGerar() {
@@ -239,6 +262,9 @@ export default function CalendarioPage() {
       toast.success(
         `Plano gerado! ${count} eventos — ${stats.criticas} matéria(s) crítica(s) priorizadas.`
       )
+      const ts = new Date().toISOString()
+      localStorage.setItem("agenda_last_generated", ts)
+      setLastGenerated(ts)
       setWeekOffset(0)
       await loadEvents()
     } catch (err: any) {
@@ -285,6 +311,15 @@ export default function CalendarioPage() {
 
   const totalEvents = events.length
   const hasAvailSet = availByDay.some((a) => a.enabled)
+
+  const daysAgo   = lastGenerated
+    ? Math.floor((Date.now() - new Date(lastGenerated).getTime()) / 86_400_000)
+    : null
+  const isNewWeek = lastGenerated
+    ? getMondayOf(new Date()) > getMondayOf(new Date(lastGenerated))
+    : false
+  const showNudge = (isNewWeek || (daysAgo !== null && daysAgo >= 7))
+    && hasAvailSet && weekOffset === 0
 
   // ─────────────────────────────────────────────────────────────
   return (
@@ -336,6 +371,34 @@ export default function CalendarioPage() {
 
       {/* ── Stats header ──────────────────────────────────── */}
       <StatsHeader />
+
+      {/* ── Outdated plan nudge ───────────────────────────── */}
+      {showNudge && !showAvailPanel && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+          <RotateCcw className="h-4 w-4 shrink-0 text-amber-500" />
+          <p className="flex-1 text-xs text-muted-foreground leading-relaxed">
+            <strong className="text-foreground">Hora de atualizar seu plano</strong>
+            {" "}— gerado há{" "}
+            <strong className="text-foreground">
+              {daysAgo} dia{daysAgo !== 1 ? "s" : ""}
+            </strong>.
+            {" "}Seu desempenho mudou? Regenere para refletir a semana atual.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleGerar}
+            disabled={generating}
+            className="shrink-0 gap-1.5 border-amber-500/30 bg-amber-500/10
+              text-amber-700 hover:bg-amber-500/20 dark:text-amber-400"
+          >
+            {generating
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <Sparkles className="h-3.5 w-3.5" />}
+            {generating ? "Gerando..." : "Atualizar agora"}
+          </Button>
+        </div>
+      )}
 
       {/* ── Availability panel ────────────────────────────── */}
       {showAvailPanel ? (
@@ -509,6 +572,84 @@ export default function CalendarioPage() {
           </div>
         </div>
       )}
+
+      {/* ── Como funciona ────────────────────────────────── */}
+      <div className="rounded-lg border border-border overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowRules((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3
+            text-left hover:bg-muted/40 transition-colors cursor-pointer"
+        >
+          <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Info className="h-4 w-4 text-muted-foreground" />
+            Como funciona a Agenda Inteligente?
+          </span>
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200
+            ${showRules ? "rotate-180" : ""}`} />
+        </button>
+
+        {showRules && (
+          <div className="border-t border-border px-4 pb-5 pt-4 space-y-5 text-sm">
+
+            {/* Classificação */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Classificação de matérias
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {[
+                  { dot: "bg-destructive",  label: "Crítica",        range: "< 40% de acerto",   pct: "60% do plano" },
+                  { dot: "bg-yellow-500",   label: "Intermediária",  range: "40–70% de acerto",  pct: "30% do plano" },
+                  { dot: "bg-primary",      label: "Boa",            range: "> 70% de acerto",   pct: "10% do plano" },
+                ].map(({ dot, label, range, pct }) => (
+                  <div key={label} className="flex items-start gap-2.5 rounded-lg bg-muted/40 px-3 py-2.5">
+                    <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${dot}`} />
+                    <div>
+                      <p className="font-medium text-foreground text-xs">{label}</p>
+                      <p className="text-[11px] text-muted-foreground">{range}</p>
+                      <p className="text-[11px] font-semibold text-foreground mt-0.5">{pct}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Estrutura da semana */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Estrutura da semana
+              </p>
+              <div className="space-y-1.5">
+                {[
+                  { icon: BookOpen,  color: "text-primary",    label: "Seg · Ter · Qui · Sex · Sáb", desc: "2 sessões/dia — Treino (90 min, 20 questões) + Revisão (60 min, 10 questões)" },
+                  { icon: FileText,  color: "text-blue-500",   label: "Quarta-feira",                desc: "Simulado completo OAB — 240 min · 80 questões · avalia todas as matérias" },
+                  { icon: RotateCcw, color: "text-yellow-500", label: "Domingo",                    desc: "Revisão semanal — consolidação de tudo que foi estudado na semana" },
+                ].map(({ icon: Icon, color, label, desc }) => (
+                  <div key={label} className="flex items-start gap-3 rounded-lg border border-border/60 px-3 py-2.5">
+                    <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${color}`} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-foreground">{label}</p>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Cadência */}
+            <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/[0.04] px-3 py-2.5">
+              <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                <strong className="text-foreground">Regenere todo início de semana</strong>
+                {" "}para que o plano reflita seu desempenho mais recente. A IA reordena as prioridades
+                automaticamente conforme suas notas evoluem.
+              </p>
+            </div>
+
+          </div>
+        )}
+      </div>
 
       {/* ── Event detail modal ────────────────────────────── */}
       <EventDetailModal

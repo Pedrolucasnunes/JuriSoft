@@ -77,6 +77,7 @@ export function StatsHeader() {
                   value={tempDate}
                   min={new Date().toISOString().split("T")[0]}
                   onChange={(e) => setTempDate(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && saveDate()}
                   className="h-7 w-36 rounded-md border border-input bg-input px-2 text-xs
                     text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 />

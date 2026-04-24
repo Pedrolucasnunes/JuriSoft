@@ -90,7 +90,7 @@ function layoutDayEvents(events: CalendarEvent[]): LayoutedEvent[] {
 // ─────────────────────────────────────────────────────────────────────────────
 // Hover Tooltip
 // ─────────────────────────────────────────────────────────────────────────────
-function EventTooltip({ event }: { event: CalendarEvent }) {
+function EventTooltip({ event, x, y }: { event: CalendarEvent; x: number; y: number }) {
   const cfg    = TYPE_CONFIG[event.type] ?? TYPE_CONFIG.study
   const Icon   = cfg.icon
   const pct    = parsePerformancePct(event.reason)
@@ -98,9 +98,15 @@ function EventTooltip({ event }: { event: CalendarEvent }) {
   const recQtd = RECOMMENDED_QUESTIONS[event.type] ?? 20
   const dur    = EVENT_DURATION_MIN[event.type] ?? 60
 
+  const TOOLTIP_W = 264
+  const winW   = typeof window !== "undefined" ? window.innerWidth : 1200
+  const left   = x + TOOLTIP_W + 24 > winW ? Math.max(4, x - TOOLTIP_W - 8) : x + 16
+
   return (
-    <div className="pointer-events-none absolute bottom-3 right-3 z-50 w-64
-      rounded-xl border border-border bg-popover shadow-xl p-4 space-y-3">
+    <div
+      className="pointer-events-none fixed z-50 w-64 rounded-xl border border-border bg-popover shadow-xl p-4 space-y-3"
+      style={{ top: Math.max(8, y - 80), left }}
+    >
       {/* Title */}
       <div className="flex items-start gap-2">
         <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${cfg.color}`} />
@@ -173,6 +179,17 @@ function EventBlock({
   const cfg    = TYPE_CONFIG[event.type] ?? TYPE_CONFIG.study
   const Icon   = cfg.icon
 
+  const isPast = (() => {
+    const now      = new Date()
+    const todayStr = now.toISOString().split("T")[0]
+    if (event.date < todayStr) return true
+    if (event.date === todayStr) {
+      const [h, m] = event.time.split(":").map(Number)
+      return h * 60 + m < now.getHours() * 60 + now.getMinutes()
+    }
+    return false
+  })()
+
   // Largura e posição horizontal para colunas paralelas
   const gutter  = 2   // px de espaço lateral
   const widthPct = 100 / colCount
@@ -182,7 +199,8 @@ function EventBlock({
     <div
       className={`absolute overflow-hidden rounded-md border-l-[3px] cursor-pointer
         bg-card hover:brightness-95 dark:hover:brightness-110
-        transition-all select-none shadow-sm ${perf.border}`}
+        transition-all select-none shadow-sm ${perf.border}
+        ${isPast ? "opacity-50" : ""}`}
       style={{
         top,
         height:     Math.max(height, 28),
@@ -306,6 +324,34 @@ function DayColumn({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Current time indicator
+// ─────────────────────────────────────────────────────────────────────────────
+function CurrentTimeLine() {
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const h = now.getHours()
+  const m = now.getMinutes()
+  if (h < START_HOUR || h >= END_HOUR) return null
+
+  const top = ((h - START_HOUR) + m / 60) * HOUR_HEIGHT
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 z-20 flex items-center"
+      style={{ top }}
+    >
+      <div className="h-2 w-2 shrink-0 rounded-full bg-destructive" />
+      <div className="h-px flex-1 bg-destructive/60" />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Weekday labels helper
 // ─────────────────────────────────────────────────────────────────────────────
 const WEEKDAYS_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
@@ -333,17 +379,22 @@ export function CalendarGrid({
   onEventClick: (event: CalendarEvent) => void
 }) {
   const [hoveredEvent, setHoveredEvent] = useState<CalendarEvent | null>(null)
+  const [mousePos, setMousePos]         = useState({ x: 0, y: 0 })
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Scroll initial para 06:00
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = 2 * HOUR_HEIGHT
-    }
+    if (!scrollRef.current) return
+    const now    = new Date()
+    const h      = now.getHours()
+    const target = Math.max(START_HOUR, Math.min(h - 1, END_HOUR - 4))
+    scrollRef.current.scrollTop = (target - START_HOUR) * HOUR_HEIGHT
   }, [])
 
   return (
-    <div className="relative hidden md:flex flex-col rounded-xl border border-border overflow-hidden bg-card">
+    <div
+      className="relative hidden md:flex flex-col rounded-xl border border-border overflow-hidden bg-card"
+      onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}
+    >
 
       {/* ── Day headers ─────────────────────────────────── */}
       <div className="flex shrink-0 border-b border-border bg-card/95 backdrop-blur-sm z-10">
@@ -397,25 +448,30 @@ export function CalendarGrid({
           ))}
         </div>
 
-        {/* Day columns */}
-        {weekDays.map((dateStr) => {
-          const { dow } = parseDateStr(dateStr)
-          return (
-            <DayColumn
-              key={dateStr}
-              dateStr={dateStr}
-              events={eventsByDate[dateStr] ?? []}
-              availability={availByDay[dow] ?? null}
-              isToday={dateStr === today}
-              onHover={setHoveredEvent}
-              onEventClick={onEventClick}
-            />
-          )
-        })}
+        {/* Day columns + current time line */}
+        <div className="relative flex flex-1 min-w-0" style={{ height: GRID_HEIGHT }}>
+          {weekDays.map((dateStr) => {
+            const { dow } = parseDateStr(dateStr)
+            return (
+              <DayColumn
+                key={dateStr}
+                dateStr={dateStr}
+                events={eventsByDate[dateStr] ?? []}
+                availability={availByDay[dow] ?? null}
+                isToday={dateStr === today}
+                onHover={setHoveredEvent}
+                onEventClick={onEventClick}
+              />
+            )
+          })}
+          <CurrentTimeLine />
+        </div>
       </div>
 
       {/* ── Hover tooltip ────────────────────────────────── */}
-      {hoveredEvent && <EventTooltip event={hoveredEvent} />}
+      {hoveredEvent && (
+        <EventTooltip event={hoveredEvent} x={mousePos.x} y={mousePos.y} />
+      )}
     </div>
   )
 }

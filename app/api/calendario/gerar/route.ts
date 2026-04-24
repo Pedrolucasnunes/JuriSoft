@@ -89,24 +89,30 @@ export async function POST(req: NextRequest) {
     end_time:    String(a.end_time).slice(0, 5),
   }))
 
-  // 6. Remove eventos automáticos existentes dos próximos 7 dias
-  const today   = new Date()
-  const endDate = new Date()
-  endDate.setDate(today.getDate() + 6)
+  // 6. Calcula segunda e domingo da semana atual
+  const now    = new Date()
+  const dow    = now.getDay()                        // 0=Dom … 6=Sáb
+  const toMon  = dow === 0 ? -6 : 1 - dow
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + toMon)
+  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6)
 
-  const todayStr   = today.toISOString().split("T")[0]
-  const endDateStr = endDate.toISOString().split("T")[0]
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 
+  const mondayStr = fmt(monday)
+  const sundayStr = fmt(sunday)
+
+  // Remove eventos automáticos da semana inteira (Seg → Dom)
   await supabase
     .from("calendar_events")
     .delete()
     .eq("user_id", userId)
     .eq("is_auto", true)
-    .gte("date", todayStr)
-    .lte("date", endDateStr)
+    .gte("date", mondayStr)
+    .lte("date", sundayStr)
 
-  // 7. Gera e insere novos eventos (com disponibilidade)
-  const events = gerarEventos(userId, desempenho, availability)
+  // 7. Gera e insere novos eventos a partir da segunda
+  const events = gerarEventos(userId, desempenho, availability, mondayStr)
 
   const { data: inserted, error: insertError } = await supabase
     .from("calendar_events")
