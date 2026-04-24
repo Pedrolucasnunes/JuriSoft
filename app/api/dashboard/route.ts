@@ -207,7 +207,7 @@ export async function GET(req: NextRequest) {
         if (!lastPractice.has(sid) || d > lastPractice.get(sid)!) lastPractice.set(sid, d)
       }
 
-      let chosen: (typeof materiasRiscoRaw)[0] | null = null
+      let chosen: NonNullable<typeof materiasRiscoRaw>[0] | null = null
       let oldestDate: Date = todayDate
 
       for (const m of materiasRiscoRaw ?? []) {
