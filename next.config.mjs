@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   turbopack: {
-    root: __dirname,
+    root: process.cwd(),
   },
   images: {
     unoptimized: true,
