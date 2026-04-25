@@ -27,33 +27,35 @@ export function Comparison() {
         </FadeIn>
 
         <FadeIn delay={100}>
-          <div className="mt-12 overflow-hidden rounded-2xl border border-border bg-card">
-            {/* Header */}
-            <div className="grid grid-cols-3 border-b border-border">
-              <div className="p-5 text-sm font-semibold text-muted-foreground">Recurso</div>
-              <div className="border-x border-border p-5 text-center text-sm font-semibold text-primary">
-                aprovaOAB
-              </div>
-              <div className="p-5 text-center text-sm font-semibold text-muted-foreground">
-                Cursinhos tradicionais
-              </div>
-            </div>
-
-            {/* Rows */}
-            {rows.map((row, i) => (
-              <div
-                key={row.label}
-                className={`grid grid-cols-3 ${i < rows.length - 1 ? "border-b border-border" : ""}`}
-              >
-                <div className="p-5 text-sm text-foreground">{row.label}</div>
+          <div className="mt-12 overflow-x-auto rounded-2xl border border-border bg-card">
+            <div className="min-w-[520px]">
+              {/* Header */}
+              <div className="grid grid-cols-3 border-b border-border">
+                <div className="p-5 text-sm font-semibold text-muted-foreground">Recurso</div>
                 <div className="border-x border-border p-5 text-center text-sm font-semibold text-primary">
-                  {row.pro}
+                  aprovaOAB
                 </div>
-                <div className="p-5 text-center text-sm text-muted-foreground">
-                  {row.traditional}
+                <div className="p-5 text-center text-sm font-semibold text-muted-foreground">
+                  Cursinhos tradicionais
                 </div>
               </div>
-            ))}
+
+              {/* Rows */}
+              {rows.map((row, i) => (
+                <div
+                  key={row.label}
+                  className={`grid grid-cols-3 ${i < rows.length - 1 ? "border-b border-border" : ""}`}
+                >
+                  <div className="p-5 text-sm text-foreground">{row.label}</div>
+                  <div className="border-x border-border p-5 text-center text-sm font-semibold text-primary">
+                    {row.pro}
+                  </div>
+                  <div className="p-5 text-center text-sm text-muted-foreground">
+                    {row.traditional}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </FadeIn>
       </div>

@@ -194,31 +194,6 @@ export function Hero() {
           </FadeIn>
         </div>
 
-        {/* ── Stats ── */}
-        <FadeIn delay={500} duration={800}>
-          <div className="mt-16 grid grid-cols-2 gap-6 border-t border-border pt-12 sm:grid-cols-4 sm:gap-8">
-            {[
-              { value: "+32 mil", label: "Alunos ativos" },
-              { value: "87%",     label: "Taxa de aprovação" },
-              { value: "4.9★",    label: "Em 2.140 avaliações" },
-              { value: "−47%",    label: "Menos tempo estudando" },
-            ].map((stat, i) => (
-              <FadeIn key={stat.label} delay={600 + i * 100} duration={600}>
-                <div className="text-center">
-                  <div
-                    className="text-2xl font-black tracking-tight text-primary sm:text-3xl"
-                    style={{ fontFamily: "'Fraunces', Georgia, serif" }}
-                  >
-                    {stat.value}
-                  </div>
-                  <div className="mt-1 font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                    {stat.label}
-                  </div>
-                </div>
-              </FadeIn>
-            ))}
-          </div>
-        </FadeIn>
       </div>
     </section>
   )

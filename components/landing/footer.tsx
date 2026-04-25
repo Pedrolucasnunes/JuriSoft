@@ -88,9 +88,8 @@ export function Footer() {
         </div>
 
         {/* Bottom bar */}
-        <div className="mt-10 flex flex-col justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground md:flex-row">
+        <div className="mt-10 border-t border-border pt-6 text-xs text-muted-foreground">
           <p>© {new Date().getFullYear()} aprovaOAB · Todos os direitos reservados</p>
-          <p>Feito com IA · Hospedado no Brasil</p>
         </div>
 
       </div>
