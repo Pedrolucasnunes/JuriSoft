@@ -2,6 +2,11 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 import { gerarEventos } from "@/lib/services/agenda"
+import {
+  getValidAccessToken,
+  createGoogleEvent,
+  deleteGoogleEvent,
+} from "@/lib/services/googleCalendar"
 
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies()
@@ -91,7 +96,7 @@ export async function POST(req: NextRequest) {
 
   // 6. Calcula segunda e domingo da semana atual
   const now    = new Date()
-  const dow    = now.getDay()                        // 0=Dom … 6=Sáb
+  const dow    = now.getDay()
   const toMon  = dow === 0 ? -6 : 1 - dow
   const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + toMon)
   const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6)
@@ -102,7 +107,28 @@ export async function POST(req: NextRequest) {
   const mondayStr = fmt(monday)
   const sundayStr = fmt(sunday)
 
-  // Remove eventos automáticos da semana inteira (Seg → Dom)
+  // 7. Busca token do Google Calendar (se conectado)
+  const googleToken = await getValidAccessToken(userId, supabase)
+
+  // 8. Antes de deletar: pega os google_event_ids para remover do Google Calendar
+  if (googleToken) {
+    const { data: oldEvents } = await supabase
+      .from("calendar_events")
+      .select("google_event_id")
+      .eq("user_id", userId)
+      .eq("is_auto", true)
+      .gte("date", mondayStr)
+      .lte("date", sundayStr)
+      .not("google_event_id", "is", null)
+
+    if (oldEvents && oldEvents.length > 0) {
+      await Promise.allSettled(
+        oldEvents.map((e) => deleteGoogleEvent(googleToken, e.google_event_id!))
+      )
+    }
+  }
+
+  // 9. Remove eventos automáticos da semana inteira (Seg → Dom)
   await supabase
     .from("calendar_events")
     .delete()
@@ -111,7 +137,7 @@ export async function POST(req: NextRequest) {
     .gte("date", mondayStr)
     .lte("date", sundayStr)
 
-  // 7. Gera e insere novos eventos a partir da segunda
+  // 10. Gera e insere novos eventos a partir da segunda
   const events = gerarEventos(userId, desempenho, availability, mondayStr)
 
   const { data: inserted, error: insertError } = await supabase
@@ -126,9 +152,37 @@ export async function POST(req: NextRequest) {
 
   console.log(`[calendario/gerar] ${inserted?.length ?? 0} eventos criados para userId=${userId}`)
 
+  // 11. Sincroniza com Google Calendar (best-effort, não bloqueia a resposta)
+  let googleSynced = false
+  if (googleToken && inserted && inserted.length > 0) {
+    try {
+      await Promise.allSettled(
+        inserted.map(async (event) => {
+          const gEventId = await createGoogleEvent(googleToken, {
+            title:       event.title,
+            date:        event.date,
+            time:        event.time,
+            type:        event.type,
+            description: event.reason,
+          })
+          if (gEventId) {
+            await supabase
+              .from("calendar_events")
+              .update({ google_event_id: gEventId })
+              .eq("id", event.id)
+          }
+        })
+      )
+      googleSynced = true
+    } catch (e) {
+      console.error("[calendario/gerar] Erro ao sincronizar Google Calendar:", e)
+    }
+  }
+
   return NextResponse.json({
-    events: inserted ?? [],
-    count:  inserted?.length ?? 0,
+    events:       inserted ?? [],
+    count:        inserted?.length ?? 0,
+    googleSynced,
     stats: {
       criticas: desempenho.filter((d) => d.taxa_acerto < 40).length,
       medias:   desempenho.filter((d) => d.taxa_acerto >= 40 && d.taxa_acerto <= 70).length,

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import {
   Sparkles, BookOpen, FileText, RotateCcw, Trophy,
   ChevronLeft, ChevronRight, ChevronDown, Loader2, CalendarDays,
-  Brain, AlertTriangle, Clock, Settings2, Info,
+  Brain, AlertTriangle, Clock, Settings2, Info, CalendarCheck2, CalendarPlus,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -184,6 +184,7 @@ export default function CalendarioPage() {
   )
   const [lastGenerated,  setLastGenerated]  = useState<string | null>(null)
   const [showRules,      setShowRules]      = useState(false)
+  const [googleConnected, setGoogleConnected] = useState(false)
 
   const today     = todayStr()
   const weekStart = weekStartFor(weekOffset)
@@ -193,6 +194,15 @@ export default function CalendarioPage() {
   const { d: sd, m: sm, y: sy } = parseDateStr(weekStart)
   const { d: ed, m: em }        = parseDateStr(weekEnd)
   const weekLabel = `${sd} ${MONTHS_PT[sm - 1]} — ${ed} ${MONTHS_PT[em - 1]} ${sy}`
+
+  // ── Load Google Calendar status ───────────────────────────────
+  const loadGoogleStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/google-calendar/status")
+      const { connected } = await res.json()
+      setGoogleConnected(connected)
+    } catch { /* silently ignore */ }
+  }, [])
 
   // ── Load availability ──────────────────────────────────────────
   const loadAvailability = useCallback(async () => {
@@ -244,10 +254,29 @@ export default function CalendarioPage() {
 
   useEffect(() => { loadAvailability() }, [loadAvailability])
   useEffect(() => { loadEvents() },       [loadEvents])
+  useEffect(() => { loadGoogleStatus() }, [loadGoogleStatus])
   useEffect(() => {
     const saved = localStorage.getItem("agenda_last_generated")
     if (saved) setLastGenerated(saved)
   }, [])
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("google") === "success") {
+      toast.success("Google Calendar conectado! Gere um plano para sincronizar.")
+      setGoogleConnected(true)
+      window.history.replaceState({}, "", window.location.pathname)
+    } else if (params.get("google") === "error") {
+      toast.error("Não foi possível conectar ao Google Calendar.")
+      window.history.replaceState({}, "", window.location.pathname)
+    }
+  }, [])
+
+  // ── Disconnect Google Calendar ────────────────────────────────
+  async function handleDisconnectGoogle() {
+    await fetch("/api/google-calendar/disconnect", { method: "DELETE" })
+    setGoogleConnected(false)
+    toast.success("Google Calendar desconectado.")
+  }
 
   // ── Generate plan ─────────────────────────────────────────────
   async function handleGerar() {
@@ -258,9 +287,9 @@ export default function CalendarioPage() {
         const body = await res.json()
         throw new Error(body.error ?? "Erro")
       }
-      const { count, stats } = await res.json()
+      const { count, stats, googleSynced } = await res.json()
       toast.success(
-        `Plano gerado! ${count} eventos — ${stats.criticas} matéria(s) crítica(s) priorizadas.`
+        `Plano gerado! ${count} eventos — ${stats.criticas} matéria(s) crítica(s) priorizadas.${googleSynced ? " Sincronizado com Google Calendar." : ""}`
       )
       const ts = new Date().toISOString()
       localStorage.setItem("agenda_last_generated", ts)
@@ -343,6 +372,27 @@ export default function CalendarioPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {googleConnected ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-green-500/40 text-green-600 hover:text-green-700 dark:text-green-400"
+              onClick={handleDisconnectGoogle}
+            >
+              <CalendarCheck2 className="h-4 w-4" />
+              Google Calendar
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => { window.location.href = "/api/google-calendar/auth" }}
+            >
+              <CalendarPlus className="h-4 w-4" />
+              Conectar Google
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
