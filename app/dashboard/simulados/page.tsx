@@ -182,7 +182,7 @@ export default function SimuladosPage() {
                 <span className="text-xs">Estrutura oficial</span>
               </span>
               <span className="flex items-center gap-1.5">
-                <Target className="h-4 w-4 text-muted-foreground/70" /> Meta 60%
+                <Target className="h-4 w-4 text-muted-foreground/70" /> Meta 50%
                 <span className="text-xs">Para aprovação</span>
               </span>
             </div>
