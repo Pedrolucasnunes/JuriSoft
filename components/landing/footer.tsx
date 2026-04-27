@@ -74,12 +74,12 @@ export function Footer() {
             <p className="mb-4 text-sm font-semibold text-foreground">Legal</p>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
-                <Link href="#" className="transition-opacity hover:opacity-80">
+                <Link href="/termos-de-uso" className="transition-opacity hover:opacity-80">
                   Termos de uso
                 </Link>
               </li>
               <li>
-                <Link href="#" className="transition-opacity hover:opacity-80">
+                <Link href="/politica-de-privacidade" className="transition-opacity hover:opacity-80">
                   Privacidade
                 </Link>
               </li>
