@@ -367,9 +367,9 @@ export default function CadastroPage() {
 
             <p className="mt-4 text-center text-xs text-muted-foreground">
               Ao criar uma conta, você concorda com nossos{" "}
-              <Link href="#" className="text-primary hover:underline">Termos de Uso</Link>{" "}
+              <Link href="/termos-de-uso" className="text-primary hover:underline">Termos de Uso</Link>{" "}
               e{" "}
-              <Link href="#" className="text-primary hover:underline">Política de Privacidade</Link>.
+              <Link href="/politica-de-privacidade" className="text-primary hover:underline">Política de Privacidade</Link>.
             </p>
 
             <div className="mt-6 text-center text-sm text-muted-foreground">
