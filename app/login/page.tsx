@@ -41,7 +41,7 @@ export default function LoginPage() {
     const email = formData.get("email") as string
     const password = formData.get("password") as string
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    const { data: signInData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -61,8 +61,15 @@ export default function LoginPage() {
     }
 
     const params = new URLSearchParams(window.location.search)
-    const redirect = params.get("redirect") ?? "/dashboard"
-    router.push(redirect)
+    const redirect = params.get("redirect")
+
+    if (redirect) {
+      router.push(redirect)
+      return
+    }
+
+    const needsOnboarding = !signInData.user?.user_metadata?.onboarding_completed
+    router.push(needsOnboarding ? "/dashboard?onboarding=true" : "/dashboard")
   }
 
   return (

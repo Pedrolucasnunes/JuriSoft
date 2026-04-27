@@ -23,6 +23,11 @@ export async function GET(req: NextRequest) {
       }
     )
     await supabase.auth.exchangeCodeForSession(code)
+    const { data: { user } } = await supabase.auth.getUser()
+    const needsOnboarding = !user?.user_metadata?.onboarding_completed
+    return NextResponse.redirect(
+      `${origin}/dashboard${needsOnboarding ? "?onboarding=true" : ""}`
+    )
   }
 
   return NextResponse.redirect(`${origin}/dashboard`)
