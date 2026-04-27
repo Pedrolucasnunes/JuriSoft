@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/dashboard/app-sidebar"
 import { OnboardingModal } from "@/components/dashboard/onboarding-modal"
+import { FeedbackButton } from "@/components/dashboard/feedback-button"
 import { Separator } from "@/components/ui/separator"
 import { ThemeToggle } from "@/components/theme-toggle"
 
@@ -28,6 +29,7 @@ export default function DashboardLayout({
       <Suspense fallback={null}>
         <OnboardingModal />
       </Suspense>
+      <FeedbackButton />
     </SidebarProvider>
   )
 }

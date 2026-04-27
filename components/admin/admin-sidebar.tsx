@@ -8,6 +8,7 @@ import {
   FileText,
   Users,
   BarChart3,
+  MessageSquare,
   LogOut,
   Settings,
 } from "lucide-react"
@@ -57,6 +58,11 @@ const menuItems = [
     title: "Estatísticas",
     url: "/admin/estatisticas",
     icon: BarChart3,
+  },
+  {
+    title: "Feedbacks",
+    url: "/admin/feedback",
+    icon: MessageSquare,
   },
 ]
 
