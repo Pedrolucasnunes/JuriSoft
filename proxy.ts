@@ -24,39 +24,50 @@ export async function proxy(req: NextRequest) {
     }
   )
 
-  const { data: { session } } = await supabase.auth.getSession()
+  // getUser() valida o JWT no servidor — mais seguro que getSession()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const rotasPublicas = ["/", "/login", "/cadastro", "/recuperar-senha"]
+  const rotasPublicas = ["/", "/login", "/cadastro", "/recuperar-senha", "/politica-de-privacidade", "/termos-de-uso"]
   const isRotaPublica = rotasPublicas.some(rota => pathname === rota || pathname.startsWith(rota + "/"))
 
-  // Redireciona para login se tentar acessar rota protegida sem sessão
   const isRotaProtegida = pathname.startsWith("/dashboard") || pathname.startsWith("/admin")
-  if (!session && isRotaProtegida) {
+
+  // Sem sessão em rota protegida → login
+  if (!user && isRotaProtegida) {
     const loginUrl = new URL("/login", req.url)
     loginUrl.searchParams.set("redirect", pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  // Redireciona para dashboard se tentar acessar login/cadastro já autenticado
-  if (session && (pathname === "/login" || pathname === "/cadastro")) {
+  // Já autenticado tentando acessar login/cadastro → dashboard
+  if (user && (pathname === "/login" || pathname === "/cadastro")) {
     return NextResponse.redirect(new URL("/dashboard", req.url))
   }
 
-  // Verifica role admin no servidor antes de servir qualquer página /admin
-  if (session && pathname.startsWith("/admin")) {
+  if (user) {
     const adminClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    const { data } = await adminClient
+    const { data: userData } = await adminClient
       .from("users")
       .select("role")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .single()
 
-    if (data?.role !== "admin") {
-      return NextResponse.redirect(new URL("/dashboard", req.url))
+    const role = userData?.role
+
+    // Conta bloqueada tentando acessar o dashboard → página de bloqueio
+    if (role === "blocked" && pathname.startsWith("/dashboard")) {
+      return NextResponse.redirect(new URL("/conta-bloqueada", req.url))
+    }
+
+    // Acesso ao admin: exige role admin
+    if (pathname.startsWith("/admin")) {
+      if (role !== "admin") {
+        return NextResponse.redirect(new URL("/dashboard", req.url))
+      }
     }
   }
 

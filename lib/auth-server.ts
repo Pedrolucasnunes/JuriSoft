@@ -7,10 +7,13 @@ type AdminAuthResult =
   | { user: { id: string }; error: null }
   | { user: null; error: NextResponse }
 
-export async function requireAdmin(): Promise<AdminAuthResult> {
-  const cookieStore = await cookies()
+type UserAuthResult =
+  | { user: { id: string }; supabase: ReturnType<typeof createServerClient>; error: null }
+  | { user: null; supabase: null; error: NextResponse }
 
-  const supabase = createServerClient(
+async function buildServerClient() {
+  const cookieStore = await cookies()
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -24,7 +27,33 @@ export async function requireAdmin(): Promise<AdminAuthResult> {
       },
     }
   )
+}
 
+/** Verifica sessão ativa + bloqueia contas com role="blocked". */
+export async function requireUser(): Promise<UserAuthResult> {
+  const supabase = await buildServerClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return { user: null, supabase: null, error: NextResponse.json({ error: "Não autenticado" }, { status: 401 }) }
+  }
+
+  const { data: userData } = await supabaseAdmin
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  if (userData?.role === "blocked") {
+    return { user: null, supabase: null, error: NextResponse.json({ error: "Conta bloqueada. Entre em contato com o suporte." }, { status: 403 }) }
+  }
+
+  return { user: { id: user.id }, supabase, error: null }
+}
+
+/** Verifica sessão ativa + exige role="admin". */
+export async function requireAdmin(): Promise<AdminAuthResult> {
+  const supabase = await buildServerClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 
   if (authError || !user) {

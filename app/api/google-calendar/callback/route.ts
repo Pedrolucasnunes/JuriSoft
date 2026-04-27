@@ -1,7 +1,7 @@
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
+import { requireUser } from "@/lib/auth-server"
 import { exchangeCodeForTokens } from "@/lib/services/googleCalendar"
+import { encrypt } from "@/lib/crypto"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -14,33 +14,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${base}?google=error`)
   }
 
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
+  const { user, supabase, error: authError } = await requireUser()
+  if (authError) {
     return NextResponse.redirect(`${base}?google=error`)
   }
 
   try {
     const tokens = await exchangeCodeForTokens(code)
+    const [encryptedAccess, encryptedRefresh] = await Promise.all([
+      encrypt(tokens.access_token),
+      encrypt(tokens.refresh_token),
+    ])
     await supabase.from("google_calendar_tokens").upsert({
       user_id:       user.id,
-      access_token:  tokens.access_token,
-      refresh_token: tokens.refresh_token,
+      access_token:  encryptedAccess,
+      refresh_token: encryptedRefresh,
       expires_at:    new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
     })
     return NextResponse.redirect(`${base}?google=success`)

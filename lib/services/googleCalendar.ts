@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { encrypt, decrypt } from "@/lib/crypto"
 
 const GOOGLE_AUTH_URL   = "https://accounts.google.com/o/oauth2/v2/auth"
 const GOOGLE_TOKEN_URL  = "https://oauth2.googleapis.com/token"
@@ -66,14 +67,18 @@ export async function getValidAccessToken(
   const expiresAt = new Date(data.expires_at)
   const isExpiringSoon = expiresAt.getTime() - Date.now() < 5 * 60 * 1000
 
-  if (!isExpiringSoon) return data.access_token
+  if (!isExpiringSoon) {
+    return decrypt(data.access_token).catch(() => null)
+  }
 
   try {
-    const refreshed = await refreshToken(data.refresh_token)
+    const plainRefresh = await decrypt(data.refresh_token)
+    const refreshed = await refreshToken(plainRefresh)
+    const encryptedAccess = await encrypt(refreshed.access_token)
     await supabase
       .from("google_calendar_tokens")
       .update({
-        access_token: refreshed.access_token,
+        access_token: encryptedAccess,
         expires_at:   new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
       })
       .eq("user_id", userId)

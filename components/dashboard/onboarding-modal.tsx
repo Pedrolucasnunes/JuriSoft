@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { createBrowserClient } from "@supabase/ssr"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { CalendarDays, CheckCircle2 } from "lucide-react"
@@ -28,11 +27,6 @@ export function OnboardingModal() {
   const [noDate, setNoDate] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
   useEffect(() => {
     if (searchParams.get("onboarding") === "true") {
       setIsOpen(true)
@@ -46,8 +40,10 @@ export function OnboardingModal() {
       ? null
       : `${year}-${String(monthIndex).padStart(2, "0")}`
 
-    await supabase.auth.updateUser({
-      data: { exam_date: examDate, onboarding_completed: true },
+    await fetch("/api/user/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exam_date: examDate }),
     })
 
     setSaving(false)
@@ -58,7 +54,11 @@ export function OnboardingModal() {
   function handleDismiss() {
     setIsOpen(false)
     router.replace("/dashboard")
-    supabase.auth.updateUser({ data: { onboarding_completed: true } }).catch(() => {})
+    fetch("/api/user/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exam_date: null }),
+    }).catch(() => {})
   }
 
   return (

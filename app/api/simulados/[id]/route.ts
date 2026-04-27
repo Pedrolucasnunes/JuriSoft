@@ -1,33 +1,13 @@
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
+import { requireUser } from "@/lib/auth-server"
 
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: simuladoId } = await params
-  const cookieStore = await cookies()
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const { user, supabase, error } = await requireUser()
+  if (error) return error
 
   // Garante que o simulado pertence ao usuário
   const { data: simulado } = await supabase
