@@ -48,14 +48,24 @@ export async function GET(req: NextRequest) {
     ? parseFloat(((totalAcertos / totalRespondidas) * 100).toFixed(2))
     : 0
 
-  // 2. Último simulado
-  const { data: ultimoSimulado, error: simError } = await supabase
-    .from("simulados")
-    .select("id, created_at, acertos, erros, percentual, numero_questoes, titulo")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single()
+  // 2. Último simulado + todos os finalizados (para taxa geral OAB)
+  const [
+    { data: ultimoSimulado, error: simError },
+    { data: simuladosFinalizados },
+  ] = await Promise.all([
+    supabase
+      .from("simulados")
+      .select("id, created_at, acertos, erros, percentual, numero_questoes, titulo")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single(),
+    supabase
+      .from("simulados")
+      .select("acertos, numero_questoes")
+      .eq("user_id", userId)
+      .not("percentual", "is", null),
+  ])
 
   if (simError && simError.code !== "PGRST116") {
     console.error("[dashboard] Erro último simulado:", simError.message)
@@ -137,6 +147,12 @@ export async function GET(req: NextRequest) {
         .sort((a, b) => a.taxa_acerto - b.taxa_acerto)
     }
   }
+
+  const totalQuestoesFinalizados = (simuladosFinalizados ?? []).reduce((acc, s) => acc + (s.numero_questoes ?? 0), 0)
+  const totalAcertosFinalizados  = (simuladosFinalizados ?? []).reduce((acc, s) => acc + (s.acertos ?? 0), 0)
+  const taxaGeralSimulado = totalQuestoesFinalizados > 0
+    ? parseFloat(((totalAcertosFinalizados / totalQuestoesFinalizados) * 100).toFixed(2))
+    : 0
 
   // 6. Action cards — dados em paralelo
   const todayDate   = new Date()
@@ -267,7 +283,7 @@ export async function GET(req: NextRequest) {
   }))
 
   return NextResponse.json({
-    resumo: { totalRespondidas, totalAcertos, taxaGeralAcerto },
+    resumo: { totalRespondidas, totalAcertos, taxaGeralAcerto: taxaGeralSimulado },
     ultimoSimulado: ultimoSimulado ?? null,
     materiasRisco,
     desempenhoPorMateria,

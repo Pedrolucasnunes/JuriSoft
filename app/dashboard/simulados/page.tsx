@@ -108,7 +108,7 @@ export default function SimuladosPage() {
     ? Math.max(...simuladosRealizados.map((s) => s.percentual))
     : null
   const proximoNumero = simuladosRealizados.length + 1
-  const metaAprovacao = 60
+  const metaAprovacao = 50
 
   return (
     <div className="space-y-4">
