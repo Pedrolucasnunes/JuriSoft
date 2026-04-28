@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Suspense, useState } from "react"
+import { Suspense, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,8 +18,12 @@ function LoginPageContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null)
+  const [otp, setOtp] = useState(["", "", "", "", "", ""])
+  const [otpError, setOtpError] = useState<string | null>(null)
+  const [otpLoading, setOtpLoading] = useState(false)
   const [resendLoading, setResendLoading] = useState(false)
   const [resendSuccess, setResendSuccess] = useState(false)
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([])
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,18 +37,68 @@ function LoginPageContent() {
     })
   }
 
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return
+    const next = [...otp]
+    next[index] = value.slice(-1)
+    setOtp(next)
+    if (value && index < 5) inputsRef.current[index + 1]?.focus()
+  }
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      inputsRef.current[index - 1]?.focus()
+    }
+  }
+
+  const handleOtpPaste = (e: React.ClipboardEvent) => {
+    const text = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)
+    if (!text) return
+    e.preventDefault()
+    const next = [...otp]
+    text.split("").forEach((char, i) => { next[i] = char })
+    setOtp(next)
+    inputsRef.current[Math.min(text.length, 5)]?.focus()
+  }
+
+  const handleVerifyOtp = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const token = otp.join("")
+    if (token.length < 6) {
+      setOtpError("Digite os 6 dígitos do código.")
+      return
+    }
+    setOtpLoading(true)
+    setOtpError(null)
+
+    const { data, error: verifyError } = await supabase.auth.verifyOtp({
+      email: unverifiedEmail!,
+      token,
+      type: "signup",
+    })
+
+    if (verifyError) {
+      setOtpError("Código inválido ou expirado. Solicite um novo código.")
+      setOtpLoading(false)
+      return
+    }
+
+    const needsOnboarding = !data.user?.user_metadata?.onboarding_completed
+    router.push(needsOnboarding ? "/dashboard?onboarding=true" : "/dashboard")
+  }
+
   const handleResend = async () => {
     if (!unverifiedEmail) return
     setResendLoading(true)
     setResendSuccess(false)
+    setOtp(["", "", "", "", "", ""])
+    setOtpError(null)
     const { error: resendError } = await supabase.auth.resend({
       type: "signup",
       email: unverifiedEmail,
     })
     setResendLoading(false)
-    if (!resendError) {
-      setResendSuccess(true)
-    }
+    if (!resendError) setResendSuccess(true)
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -64,7 +118,7 @@ function LoginPageContent() {
     })
 
     if (authError) {
-      if (authError.message.toLowerCase().includes("not confirmed") || authError.message.toLowerCase().includes("email not confirmed")) {
+      if (authError.message.toLowerCase().includes("not confirmed")) {
         setUnverifiedEmail(email)
       } else {
         setError("E-mail ou senha incorretos. Tente novamente.")
@@ -90,7 +144,6 @@ function LoginPageContent() {
 
     const params = new URLSearchParams(window.location.search)
     const redirect = params.get("redirect")
-
     if (redirect) {
       router.push(redirect)
       return
@@ -135,30 +188,59 @@ function LoginPageContent() {
                 <div>
                   <p className="font-semibold text-foreground">Conta não verificada</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Confirme seu e-mail antes de entrar. Enviamos um código para{" "}
+                    Digite o código de 6 dígitos enviado para{" "}
                     <span className="font-medium text-foreground">{unverifiedEmail}</span>.
                   </p>
                 </div>
 
-                {resendSuccess && (
-                  <p className="text-sm text-primary">Código reenviado! Verifique sua caixa de entrada.</p>
-                )}
+                <form onSubmit={handleVerifyOtp} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="block text-center">Código de verificação</Label>
+                    <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
+                      {otp.map((digit, i) => (
+                        <input
+                          key={i}
+                          ref={(el) => { inputsRef.current[i] = el }}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={1}
+                          value={digit}
+                          onChange={(e) => handleOtpChange(i, e.target.value)}
+                          onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                          className="h-12 w-10 rounded-md border border-input bg-input text-center text-lg font-semibold focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                      ))}
+                    </div>
+                  </div>
 
-                <Button
-                  className="w-full"
-                  onClick={handleResend}
-                  disabled={resendLoading}
-                >
-                  {resendLoading ? "Enviando..." : "Reenviar código de verificação"}
-                </Button>
+                  {otpError && <p className="text-sm text-destructive">{otpError}</p>}
 
-                <button
-                  type="button"
-                  onClick={() => { setUnverifiedEmail(null); setResendSuccess(false) }}
-                  className="cursor-pointer text-sm text-muted-foreground hover:text-foreground"
-                >
-                  Voltar ao login
-                </button>
+                  {resendSuccess && (
+                    <p className="text-sm text-primary">Código reenviado! Verifique sua caixa de entrada.</p>
+                  )}
+
+                  <Button type="submit" className="w-full" disabled={otpLoading}>
+                    {otpLoading ? "Verificando..." : "Verificar código"}
+                  </Button>
+                </form>
+
+                <div className="flex items-center justify-between text-sm">
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={resendLoading}
+                    className="cursor-pointer text-primary hover:underline disabled:opacity-50"
+                  >
+                    {resendLoading ? "Enviando..." : "Reenviar código"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setUnverifiedEmail(null); setResendSuccess(false); setOtp(["", "", "", "", "", ""]) }}
+                    className="cursor-pointer text-muted-foreground hover:text-foreground"
+                  >
+                    Voltar ao login
+                  </button>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -177,10 +259,7 @@ function LoginPageContent() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Senha</Label>
-                    <Link
-                      href="/recuperar-senha"
-                      className="text-xs text-primary hover:underline"
-                    >
+                    <Link href="/recuperar-senha" className="text-xs text-primary hover:underline">
                       Esqueceu a senha?
                     </Link>
                   </div>
@@ -198,11 +277,7 @@ function LoginPageContent() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
                 </div>
@@ -211,9 +286,7 @@ function LoginPageContent() {
                   <p className="text-sm text-primary">Senha redefinida com sucesso! Faça login.</p>
                 )}
 
-                {error && (
-                  <p className="text-sm text-destructive">{error}</p>
-                )}
+                {error && <p className="text-sm text-destructive">{error}</p>}
 
                 <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? "Entrando..." : "Entrar"}
@@ -228,12 +301,7 @@ function LoginPageContent() {
                   </div>
                 </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full gap-2"
-                  onClick={handleGoogleLogin}
-                >
+                <Button type="button" variant="outline" className="w-full gap-2" onClick={handleGoogleLogin}>
                   <svg viewBox="0 0 24 24" className="h-4 w-4">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
                     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
