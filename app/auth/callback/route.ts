@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server"
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url)
   const code = searchParams.get("code")
+  const type = searchParams.get("type")
 
   if (code) {
     const cookieStore = await cookies()
@@ -23,6 +24,11 @@ export async function GET(req: NextRequest) {
       }
     )
     await supabase.auth.exchangeCodeForSession(code)
+
+    if (type === "recovery") {
+      return NextResponse.redirect(`${origin}/recuperar-senha/nova-senha`)
+    }
+
     const { data: { user } } = await supabase.auth.getUser()
     const needsOnboarding = !user?.user_metadata?.onboarding_completed
     return NextResponse.redirect(
