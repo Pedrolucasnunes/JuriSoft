@@ -76,10 +76,10 @@ export async function POST(req: NextRequest) {
       query = query.not("id", "in", `(${idsJaAcertou.join(",")})`)
     }
 
-    const { data, error } = await query
+    const { data, error: riscoError } = await query
 
-    if (error) {
-      console.error("[treino] Erro questões risco:", error.message)
+    if (riscoError) {
+      console.error("[treino] Erro questões risco:", riscoError.message)
     }
 
     questoesRisco = (data ?? []).sort(() => Math.random() - 0.5).slice(0, qtdRisco)

@@ -14,8 +14,7 @@ export async function GET(
   const { user, supabase, error } = await requireUser()
   if (error) return error
 
-  // ✅ Filtra por user_id para respeitar RLS
-  const { data, error } = await supabase
+  const { data, error: dbError } = await supabase
     .from("simulado_attempts")
     .select(`
       id,
@@ -34,9 +33,9 @@ export async function GET(
     .eq("simulado_id", simuladoId)
     .eq("user_id", user.id)
 
-  if (error) {
-    console.error("[questoes] Erro:", error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (dbError) {
+    console.error("[questoes] Erro:", dbError.message)
+    return NextResponse.json({ error: dbError.message }, { status: 500 })
   }
 
   // Busca nomes das matérias

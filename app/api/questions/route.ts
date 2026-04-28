@@ -31,11 +31,11 @@ export async function GET(req: NextRequest) {
 
   query = query.range(offset, offset + limit - 1)
 
-  const { data: questions, error, count } = await query
+  const { data: questions, error: dbError, count } = await query
 
-  if (error) {
-    console.error("[questions] Erro ao buscar questões:", error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (dbError) {
+    console.error("[questions] Erro ao buscar questões:", dbError.message)
+    return NextResponse.json({ error: dbError.message }, { status: 500 })
   }
 
   const subjectIds = [...new Set((questions ?? []).map((q) => q.subject_id).filter(Boolean))]

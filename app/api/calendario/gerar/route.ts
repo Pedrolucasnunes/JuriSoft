@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     .select("id, name")
 
   const subjectMap = Object.fromEntries(
-    (subjects ?? []).map((s) => [s.id, s.name])
+    (subjects ?? []).map((s: { id: string; name: string }) => [s.id, s.name])
   )
 
   // 3. Agrupa por subject_id e calcula taxa
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
   // 4. Fallback: sem histórico → usa todas as matérias como médias (50%)
   if (desempenho.length === 0 && subjects && subjects.length > 0) {
-    desempenho = subjects.map((s) => ({
+    desempenho = subjects.map((s: { id: string; name: string }) => ({
       subject_id:  s.id,
       nome:        s.name,
       taxa_acerto: 50,
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     .select("day_of_week, start_time, end_time")
     .eq("user_id", userId)
 
-  const availability = (availabilityRaw ?? []).map((a) => ({
+  const availability = (availabilityRaw ?? []).map((a: { day_of_week: number; start_time: string; end_time: string }) => ({
     day_of_week: a.day_of_week,
     start_time:  String(a.start_time).slice(0, 5),
     end_time:    String(a.end_time).slice(0, 5),
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
 
     if (oldEvents && oldEvents.length > 0) {
       await Promise.allSettled(
-        oldEvents.map((e) => deleteGoogleEvent(googleToken, e.google_event_id!))
+        oldEvents.map((e: { google_event_id: string | null }) => deleteGoogleEvent(googleToken, e.google_event_id!))
       )
     }
   }
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
   if (googleToken && inserted && inserted.length > 0) {
     try {
       await Promise.allSettled(
-        inserted.map(async (event) => {
+        inserted.map(async (event: { id: string; title: string; date: string; time: string; type: string; reason?: string; google_event_id?: string | null }) => {
           const gEventId = await createGoogleEvent(googleToken, {
             title:       event.title,
             date:        event.date,

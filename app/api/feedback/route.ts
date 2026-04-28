@@ -23,16 +23,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Tipo inválido" }, { status: 400 })
   }
 
-  const { error } = await supabase.from("feedback").insert({
+  const { error: dbError } = await supabase.from("feedback").insert({
     user_id: user.id,
     type,
     message: message.trim(),
     page: page ?? null,
   })
 
-  if (error) {
-    console.error("[feedback] Erro ao salvar:", error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (dbError) {
+    console.error("[feedback] Erro ao salvar:", dbError.message)
+    return NextResponse.json({ error: dbError.message }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true }, { status: 201 })

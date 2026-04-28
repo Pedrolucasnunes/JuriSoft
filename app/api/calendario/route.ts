@@ -19,10 +19,10 @@ export async function GET(req: NextRequest) {
   if (startDate) query = query.gte("date", startDate)
   if (endDate)   query = query.lte("date", endDate)
 
-  const { data, error } = await query
+  const { data, error: dbError } = await query
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (dbError) {
+    return NextResponse.json({ error: dbError.message }, { status: 500 })
   }
 
   return NextResponse.json({ events: data ?? [] })

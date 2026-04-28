@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: resumoError.message }, { status: 500 })
   }
 
-  const totalRespondidas = resumo?.reduce((acc, r) => acc + (r.total ?? 0), 0) ?? 0
-  const totalAcertos = resumo?.reduce((acc, r) => acc + (r.acertos ?? 0), 0) ?? 0
+  const totalRespondidas = resumo?.reduce((acc: number, r) => acc + (r.total ?? 0), 0) ?? 0
+  const totalAcertos = resumo?.reduce((acc: number, r) => acc + (r.acertos ?? 0), 0) ?? 0
   const taxaGeralAcerto = totalRespondidas > 0
     ? parseFloat(((totalAcertos / totalRespondidas) * 100).toFixed(2))
     : 0
@@ -124,8 +124,8 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const totalQuestoesFinalizados = (simuladosFinalizados ?? []).reduce((acc, s) => acc + (s.numero_questoes ?? 0), 0)
-  const totalAcertosFinalizados  = (simuladosFinalizados ?? []).reduce((acc, s) => acc + (s.acertos ?? 0), 0)
+  const totalQuestoesFinalizados = (simuladosFinalizados ?? []).reduce((acc: number, s) => acc + (s.numero_questoes ?? 0), 0)
+  const totalAcertosFinalizados  = (simuladosFinalizados ?? []).reduce((acc: number, s) => acc + (s.acertos ?? 0), 0)
   const taxaGeralSimulado = totalQuestoesFinalizados > 0
     ? parseFloat(((totalAcertosFinalizados / totalQuestoesFinalizados) * 100).toFixed(2))
     : 0

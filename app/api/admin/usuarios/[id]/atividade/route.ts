@@ -98,8 +98,8 @@ export async function GET(
   return NextResponse.json({
     user: {
       id: userId,
-      email: authUser?.email ?? null,
-      nome: authUser?.user_metadata?.full_name ?? null,
+      email: authUser?.user?.email ?? null,
+      nome: authUser?.user?.user_metadata?.full_name ?? null,
     },
     resumo: {
       hoje,
