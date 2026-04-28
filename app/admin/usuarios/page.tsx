@@ -12,16 +12,20 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Search, MoreHorizontal, ShieldOff, ShieldCheck, Loader2 } from "lucide-react"
+import { Search, MoreHorizontal, ShieldOff, ShieldCheck, Loader2, Activity } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 interface Usuario {
   id: string
   role: string
+  email: string
+  nome: string
   simulados: number
   questoes: number
 }
 
 export default function AdminUsuariosPage() {
+  const router = useRouter()
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [pagination, setPagination] = useState({ total: 0, page: 1, totalPages: 0 })
   const [loading, setLoading] = useState(true)
@@ -111,7 +115,7 @@ export default function AdminUsuariosPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
+                  <TableHead>Usuário</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Simulados</TableHead>
                   <TableHead>Questões</TableHead>
@@ -122,7 +126,12 @@ export default function AdminUsuariosPage() {
                 {usuarios.map((u) => (
                   <TableRow key={u.id}>
                     <TableCell>
-                      <p className="font-mono text-xs text-muted-foreground">{u.id.slice(0, 8)}...</p>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium text-foreground">
+                          {u.nome || "Sem nome"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{u.email}</span>
+                      </div>
                     </TableCell>
                     <TableCell>{getRoleBadge(u.role)}</TableCell>
                     <TableCell>{u.simulados}</TableCell>
@@ -135,6 +144,9 @@ export default function AdminUsuariosPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => router.push(`/admin/usuarios/${u.id}`)}>
+                            <Activity className="mr-2 h-4 w-4" /> Ver atividade
+                          </DropdownMenuItem>
                           {u.role !== "admin" && (
                             <DropdownMenuItem onClick={() => setAdmin(u.id)}>
                               <ShieldCheck className="mr-2 h-4 w-4" /> Tornar Admin

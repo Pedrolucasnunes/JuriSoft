@@ -18,15 +18,33 @@ export async function GET(req: NextRequest) {
 
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
 
+  const ids = (users ?? []).map((u) => u.id)
+
+  // Busca dados de auth (email, nome) para os usuários da página atual
+  const authUsersMap: Record<string, { email: string; nome: string }> = {}
+  await Promise.all(
+    ids.map(async (id) => {
+      const { data } = await supabaseAdmin.auth.admin.getUserById(id)
+      if (data?.user) {
+        authUsersMap[id] = {
+          email: data.user.email ?? "",
+          nome: data.user.user_metadata?.full_name ?? "",
+        }
+      }
+    })
+  )
+
   const usersWithStats = await Promise.all(
     (users ?? []).map(async (u) => {
       const [{ count: totalSimulados }, { count: totalQuestoes }] = await Promise.all([
-        supabaseAdmin.from("simulados").select("id", { count: "exact" }).eq("user_id", u.id).gt("acertos", 0),
-        supabaseAdmin.from("question_attempts").select("id", { count: "exact" }).eq("user_id", u.id),
+        supabaseAdmin.from("simulados").select("id", { count: "exact", head: true }).eq("user_id", u.id).gt("acertos", 0),
+        supabaseAdmin.from("question_attempts").select("id", { count: "exact", head: true }).eq("user_id", u.id),
       ])
       return {
         id: u.id,
         role: u.role,
+        email: authUsersMap[u.id]?.email ?? "",
+        nome: authUsersMap[u.id]?.nome ?? "",
         simulados: totalSimulados ?? 0,
         questoes: totalQuestoes ?? 0,
       }
